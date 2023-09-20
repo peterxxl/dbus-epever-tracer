@@ -110,6 +110,8 @@ class DbusEpever(object):
 
         self._dbusservice.add_path('/History/Daily/0/Yield', 0)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)
+        self._dbusservice.add_path('/History/Daily/0/MaxPvVoltage', 0)
+
         self._dbusservice.add_path('/History/Daily/1/Yield', 0)
         self._dbusservice.add_path('/History/Daily/1/MaxPower', 0)
 
@@ -150,6 +152,9 @@ class DbusEpever(object):
 
             if self._dbusservice['/Yield/Power'] > self._dbusservice['/History/Daily/0/MaxPower']:
                 self._dbusservice['/History/Daily/0/MaxPower'] = self._dbusservice['/Yield/Power']
+
+            if self._dbusservice['/Dc/0/Voltage'] > self._dbusservice['/History/Daily/0/MaxPvVoltage']:
+                self._dbusservice['/History/Daily/0/MaxPvVoltage'] = self._dbusservice['/Dc/0/Voltage']
 
         return True
 
