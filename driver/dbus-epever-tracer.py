@@ -12,7 +12,7 @@ https://github.com/victronenergy/dbus_vebus_to_pvinverter/tree/master/test
 """
 from asyncio import exceptions
 import gettext
-from webbrowser import get
+#from webbrowser import get
 from gi.repository import GLib
 import dbus
 import dbus.service
@@ -31,12 +31,12 @@ from vedbus import VeDbusService
 #Variablen
 softwareversion = '0.8'
 serialnumber = '0000000000000000'
-productname='TriRonXXXX'
+productname='PV Charger'
 hardwareversion = '00.00'
 firmwareversion = '00.00'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
-deviceinstance = 290    #VRM instanze
+deviceinstance = 290    #VRM instance
 exceptionCounter = 0
 state = [0,5,3,6]
 
@@ -46,7 +46,7 @@ if len(sys.argv) > 1:
 else:
     sys.exit()
 
-#controller = minimalmodbus.Instrument('/dev/ttyUSB0', 1)
+controller = minimalmodbus.Instrument('/dev/ttyUSB0', 1)
 controller.serial.baudrate = 115200
 controller.serial.bytesize = 8
 controller.serial.parity = serial.PARITY_NONE
