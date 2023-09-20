@@ -29,9 +29,10 @@ sys.path.insert(1, os.path.join(os.path.dirname(__file__), '../ext/velib_python'
 from vedbus import VeDbusService
 
 #Variablen
-softwareversion = '0.8'
+softwareversion = '0.9'
 serialnumber = '0000000000000000'
 productname='PV Charger'
+customname='PV Charger'
 hardwareversion = '00.00'
 firmwareversion = '00.00'
 connection = 'USB'
@@ -71,7 +72,7 @@ class DbusEpever(object):
         _c = lambda p, v: (str(v) + '°C')
 
         logging.debug("%s /DeviceInstance = %d" % (servicename, deviceinstance))
-        
+
         # Create the management objects, as specified in the ccgx dbus-api document
         self._dbusservice.add_path('/Mgmt/ProcessName', __file__)
         self._dbusservice.add_path('/Mgmt/ProcessVersion', softwareversion)
@@ -85,14 +86,14 @@ class DbusEpever(object):
         self._dbusservice.add_path('/HardwareVersion', hardwareversion)
         self._dbusservice.add_path('/Connected', 1)
         self._dbusservice.add_path('/Serial', serialnumber)
-        self._dbusservice.add_path('/CustomName', None, writeable=True)
+        self._dbusservice.add_path('/CustomName', customname, writeable=True)
 
         self._dbusservice.add_path('/Link/NetworkMode', 0)
         self._dbusservice.add_path('/Link/NetworkStatus', 4)
         self._dbusservice.add_path('/Settings/BmsPresent', 0)
         #self._dbusservice.add_path('/Link/ChargeVoltage', 0)
         #self._dbusservice.add_path('/Link/ChargeCurrent', 10)
-        #self._dbusservice.add_path('/Settings/ChargeCurrentLimit', None)     
+        #self._dbusservice.add_path('/Settings/ChargeCurrentLimit', None)
         #self._dbusservice.add_path('/DeviceOffReason', 1)
 
         self._dbusservice.add_path('/Dc/0/Current', None, gettextcallback=_a)
@@ -105,7 +106,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Load/State',None, writeable=True)
         self._dbusservice.add_path('/Load/I',None, gettextcallback=_a)
         self._dbusservice.add_path('/ErrorCode',0)
-     
+
 
         self._dbusservice.add_path('/History/Daily/0/Yield', 0)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)
@@ -113,9 +114,9 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/1/MaxPower', 0)
 
         #self._dbusservice.add_path('/100/Relay/0/State', 1, writeable=True)
-        
+
         GLib.timeout_add(1000, self._update)
-        
+
     def _update(self):
 
         def getBit(num, i):
@@ -129,8 +130,8 @@ class DbusEpever(object):
         except:
             print(exceptions)
             exceptionCounter +=1
-            if exceptionCounter  >= 3:   
-                exit()       
+            if exceptionCounter  >= 3:
+                exit()
         else:
             exceptionCounter = 0
             if c3100[0] < 1:            #PV Voltage min 0.01 damit PV Current berechnet werden kann
@@ -146,7 +147,7 @@ class DbusEpever(object):
             self._dbusservice['/Load/State'] = c3200[2]
             self._dbusservice['/Yield/User'] =(c3300[18] | c3300[19] << 8)/100
             self._dbusservice['/History/Daily/0/Yield'] =(c3300[12] | c3300[13] << 8)/100
-            
+
             if self._dbusservice['/Yield/Power'] > self._dbusservice['/History/Daily/0/MaxPower']:
                 self._dbusservice['/History/Daily/0/MaxPower'] = self._dbusservice['/Yield/Power']
 
