@@ -34,7 +34,7 @@ serialnumber = '0000000000000000'
 productname='PV Charger'
 customname='PV Charger'
 hardwareversion = '00.00'
-firmwareversion = '00.00'
+firmwareversion = '0.1'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 290    #VRM instance
@@ -127,7 +127,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/2/MaxPvVoltage', 0)
         self._dbusservice.add_path('/History/Daily/2/MinBatteryVoltage', 1)
         self._dbusservice.add_path('/History/Daily/2/MaxBatteryVoltage', 2)
-        self._dbusservice.add_path('/History/Daily/2/MaxBatteryCurrent', 3)        
+        self._dbusservice.add_path('/History/Daily/2/MaxBatteryCurrent', 3)
 
         #self._dbusservice.add_path('/100/Relay/0/State', 1, writeable=True)
 
