@@ -102,6 +102,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Pv/V', None, gettextcallback=_v)
         self._dbusservice.add_path('/Yield/Power', None, gettextcallback=_w)
         self._dbusservice.add_path('/Yield/User', None, gettextcallback=_kwh)
+        self._dbusservice.add_path('/Yield/System', None, gettextcallback=_kwh)
         self._dbusservice.add_path('/Load/State',None, writeable=True)
         self._dbusservice.add_path('/Load/I',None, gettextcallback=_a)
         self._dbusservice.add_path('/ErrorCode',0)
@@ -139,10 +140,9 @@ class DbusEpever(object):
             c3200 = controller.read_registers(0x3200,3,4)
             c3300 = controller.read_registers(0x3300,20,4)
 
-
             # log boost charging voltage
             boostchargingvoltage = controller.read_registers(0x9007, 2, 3)
-            logging.info(f"boost charging voltage: {boostchargingvoltage[0]}, float charging voltage: {boostchargingvoltage[1]}")
+            #logging.info(f"boost charging voltage: {boostchargingvoltage[0]}, float charging voltage: {boostchargingvoltage[1]}")
 
         except:
             print(exceptions)
@@ -164,11 +164,12 @@ class DbusEpever(object):
             # Victron State 0=Off 2=Fault 3=Bulk 4=Absorption 5=Float 6=Storage 7=Equalize 252=External control
             # Epever State  00 No charging, 01 Float charging, 02 Boost charging, 03 Equalizing charging
             self._dbusservice['/State'] = state[getBit(c3200[1],3)* 2 + getBit(c3200[1],2)]
-            if self._dbusservice['/State'] == 3 and self._dbusservice['/Dc/0/Voltage'] > boostchargingvoltage[1]:
+            if self._dbusservice['/State'] == 3 and self._dbusservice['/Dc/0/Voltage'] > boostchargingvoltage[1]/100:
                 self._dbusservice['/State'] = 4
 
             self._dbusservice['/Load/State'] = c3200[2]
             self._dbusservice['/Yield/User'] =(c3300[18] | c3300[19] << 8)/100
+            self._dbusservice['/Yield/System'] =(c3300[18] | c3300[19] << 8)/100
             self._dbusservice['/History/Daily/0/Yield'] =(c3300[12] | c3300[13] << 8)/100
 
             # overall history
