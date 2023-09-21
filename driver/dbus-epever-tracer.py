@@ -28,16 +28,16 @@ import serial
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), '../ext/velib_python'))
 from vedbus import VeDbusService
 
-#Variablen
+# Variables
 softwareversion = '0.9'
-serialnumber = '0000000000000000'
-productname='PV Charger'
+serialnumber = '0000'
+productname='Epever Tracer MPPT'
 customname='PV Charger'
 hardwareversion = '00.00'
-firmwareversion = '0.2'
+firmwareversion = 'v0.3'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
-deviceinstance = 290    #VRM instance
+deviceinstance = 290    # VRM instance
 exceptionCounter = 0
 state = [0,5,3,6]
 
@@ -80,7 +80,7 @@ class DbusEpever(object):
 
         # Create the mandatory objects
         self._dbusservice.add_path('/DeviceInstance', deviceinstance)
-        self._dbusservice.add_path('/ProductId', 1)
+        self._dbusservice.add_path('/ProductId', 1000)
         self._dbusservice.add_path('/ProductName', productname)
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
         self._dbusservice.add_path('/HardwareVersion', hardwareversion)
@@ -110,28 +110,19 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)
         self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 100, gettextcallback=_v)
         self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 0, gettextcallback=_v)
-        self._dbusservice.add_path('/History/Overall/DaysAvailable', 3)
+        self._dbusservice.add_path('/History/Overall/DaysAvailable', 1)
 
-        self._dbusservice.add_path('/History/Daily/0/Yield', 0)
+        self._dbusservice.add_path('/History/Daily/0/Yield', 0.0)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)
         self._dbusservice.add_path('/History/Daily/0/MaxPvVoltage', 0)
         self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 100)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryVoltage', 0)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryCurrent', 0)
-
-        self._dbusservice.add_path('/History/Daily/1/Yield', 0)
-        self._dbusservice.add_path('/History/Daily/1/MaxPower', 0)
-        self._dbusservice.add_path('/History/Daily/1/MaxPvVoltage', 0)
-        self._dbusservice.add_path('/History/Daily/1/MinBatteryVoltage', 100)
-        self._dbusservice.add_path('/History/Daily/1/MaxBatteryVoltage', 0)
-        self._dbusservice.add_path('/History/Daily/1/MaxBatteryCurrent', 0)
-
-        self._dbusservice.add_path('/History/Daily/2/Yield', 0)
-        self._dbusservice.add_path('/History/Daily/2/MaxPower', 0)
-        self._dbusservice.add_path('/History/Daily/2/MaxPvVoltage', 0)
-        self._dbusservice.add_path('/History/Daily/2/MinBatteryVoltage', 100)
-        self._dbusservice.add_path('/History/Daily/2/MaxBatteryVoltage', 0)
-        self._dbusservice.add_path('/History/Daily/2/MaxBatteryCurrent', 0)
+        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 1.0)
+        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorbtion', 1.0)
+        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 1.0)
+        self._dbusservice.add_path('/History/Daily/0/LastError1', 0)
+        #self._dbusservice.add_path('/History/Daily/0/Nr', 1)
 
         #self._dbusservice.add_path('/100/Relay/0/State', 1, writeable=True)
 
