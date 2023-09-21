@@ -140,8 +140,8 @@ class DbusEpever(object):
             c3300 = controller.read_registers(0x3300,20,4)
 
             # log boost charging voltage
-            boost_charging_voltage = controller.read_registers(0x9007, 2, 3)
-            logging.info(f"boost charging voltage: {boost_charging_voltage}"")
+            boostchargingvoltage = controller.read_registers(0x9007, 2, 3)
+            logging.info(f"boost charging voltage: {boostchargingvoltage})
 
         except:
             print(exceptions)
