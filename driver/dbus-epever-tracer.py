@@ -138,6 +138,11 @@ class DbusEpever(object):
             c3100 = controller.read_registers(0x3100,18,4)
             c3200 = controller.read_registers(0x3200,3,4)
             c3300 = controller.read_registers(0x3300,20,4)
+
+            # log boost charging voltage
+            boost_charging_voltage = controller.read_registers(0x9007, 2, 3)
+            logging.info(f"boost charging voltage: {boost_charging_voltage}"")
+
         except:
             print(exceptions)
             exceptionCounter +=1
@@ -154,7 +159,10 @@ class DbusEpever(object):
             self._dbusservice['/Pv/V'] = c3100[0]/100
             self._dbusservice['/Yield/Power'] =round((c3100[2] | c3100[3] << 8)/100)
             self._dbusservice['/Load/I'] = c3100[13]/100
+
+            # /State 0=Off 2=Fault 3=Bulk 4=Absorption 5=Float 6=Storage 7=Equalize 252=External control
             self._dbusservice['/State'] = state[getBit(c3200[1],3)* 2 + getBit(c3200[1],2)]
+
             self._dbusservice['/Load/State'] = c3200[2]
             self._dbusservice['/Yield/User'] =(c3300[18] | c3300[19] << 8)/100
             self._dbusservice['/History/Daily/0/Yield'] =(c3300[12] | c3300[13] << 8)/100
