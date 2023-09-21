@@ -107,9 +107,9 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Load/I',None, gettextcallback=_a)
         self._dbusservice.add_path('/ErrorCode',0)
 
-        self._dbusservice.add_path('/History/Overall/MaxPvVoltage')
-        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage')
-        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage')
+        self._dbusservice.add_path('/History/Overall/MaxPvVoltage', None)
+        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', None)
+        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', None)
 
         self._dbusservice.add_path('/History/Daily/0/Yield', 0)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)
