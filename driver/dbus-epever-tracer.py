@@ -107,9 +107,9 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Load/I',None, gettextcallback=_a)
         self._dbusservice.add_path('/ErrorCode',0)
 
-        self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 2)
-        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage',4)
-        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 6)
+        self._dbusservice.add_path('/History/Overall/MaxPvVoltage')
+        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage')
+        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage')
 
         self._dbusservice.add_path('/History/Daily/0/Yield', 0)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)
@@ -167,7 +167,17 @@ class DbusEpever(object):
             self._dbusservice['/Yield/User'] =(c3300[18] | c3300[19] << 8)/100
             self._dbusservice['/History/Daily/0/Yield'] =(c3300[12] | c3300[13] << 8)/100
 
+            # overall history
+            if self._dbusservice['/Pv/V'] > self._dbusservice['/History/Overall/MaxPvVoltage']:
+                self._dbusservice['/History/Overall/MaxPvVoltage'] = self._dbusservice['/Pv/V']
 
+            if self._dbusservice['/Dc/0/Voltage'] < self._dbusservice['/History/Overall/MinBatteryVoltage']:
+                self._dbusservice['/History/Overall/MinBatteryVoltage'] = self._dbusservice['/Dc/0/Voltage']
+
+            if self._dbusservice['/Dc/0/Voltage'] > self._dbusservice['/History/Overall/MaxBatteryVoltage']:
+                self._dbusservice['/History/Overall/MaxBatteryVoltage'] = self._dbusservice['/Dc/0/Voltage']
+
+            # daily history
             if self._dbusservice['/Yield/Power'] > self._dbusservice['/History/Daily/0/MaxPower']:
                 self._dbusservice['/History/Daily/0/MaxPower'] = self._dbusservice['/Yield/Power']
 
