@@ -31,9 +31,9 @@ from vedbus import VeDbusService
 # Variables
 softwareversion = '0.9'
 serialnumber = '0000'
-productname='Epever Tracer MPPT'
-customname='PV Charger'
-hardwareversion = '00.00'
+productname = 'Epever Tracer MPPT'
+productid = 0xB001
+customname = 'PV Charger'
 firmwareversion = 'v0.3'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
@@ -80,10 +80,9 @@ class DbusEpever(object):
 
         # Create the mandatory objects
         self._dbusservice.add_path('/DeviceInstance', deviceinstance)
-        self._dbusservice.add_path('/ProductId', 1000)
+        self._dbusservice.add_path('/ProductId', productid)
         self._dbusservice.add_path('/ProductName', productname)
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
-        self._dbusservice.add_path('/HardwareVersion', hardwareversion)
         self._dbusservice.add_path('/Connected', 1)
         self._dbusservice.add_path('/Serial', serialnumber)
         self._dbusservice.add_path('/CustomName', customname, writeable=True)
@@ -111,6 +110,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 100, gettextcallback=_v)
         self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 0, gettextcallback=_v)
         self._dbusservice.add_path('/History/Overall/DaysAvailable', 1)
+        self._dbusservice.add_path('/History/Overall/LastError1', 0)
 
         self._dbusservice.add_path('/History/Daily/0/Yield', 0.0)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)
@@ -118,9 +118,9 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 100)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryVoltage', 0)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryCurrent', 0)
-        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 1.0)
-        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorbtion', 1.0)
-        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 1.0)
+        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0.01)
+        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorption', 0.01)
+        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 0.01)
         self._dbusservice.add_path('/History/Daily/0/LastError1', 0)
         #self._dbusservice.add_path('/History/Daily/0/Nr', 1)
 
