@@ -8,6 +8,7 @@
 >
 > - **Victron Cerbo-S GX** running **Venus OS v3.12**
 > - **EPEVER Tracer 3210A MPPT Solar Charge Controller**
+> - **Victron Energy USB RS485 cable (FT232R chipset)** — recommended and tested
 > - Should also work on other Venus OS devices (GX, Raspberry Pi, etc.) and compatible EPEVER Tracer models
 
 ---
@@ -71,7 +72,7 @@ chmod +x update.sh
 
 ## Hardware Connection Notes
 
-- The original EPEVER cable may not work on all devices (especially Raspberry Pi). If you encounter issues, try a different RS485-to-USB adapter. [This adapter](https://amzn.eu/d/56BrzXs) is tested and works reliably.
+- **Recommended and tested:** Victron Energy USB RS485 cable (FT232R chipset). This is the officially supported and tested adapter for this driver.
 - Ensure the driver service is started with the correct serial device (e.g., `/dev/ttyUSB0`).
 - If using a different adapter, update the start script or service configuration as needed.
 

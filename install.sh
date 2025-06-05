@@ -3,6 +3,7 @@
 # ===============================
 # Epever Tracer Venus OS Installer
 # ===============================
+# Tested with Victron Energy USB RS485 cable (FT232R chipset)
 # This script installs the Epever Tracer driver and its dependencies on Venus OS.
 # It will install required Python packages, download the driver and libraries,
 # and organize everything for you. Use at your own risk!
