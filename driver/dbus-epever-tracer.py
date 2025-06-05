@@ -65,9 +65,10 @@ from vedbus import VeDbusService  # Victron's DBus service implementation
 softwareversion = '0.9'
 serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
-productid = 0xA076
-customname = 'PV Charger'
-firmwareversion = 'v1.0'
+# productid = 0xA076
+productid = 0xB001
+customname = 'Cargador FV'
+firmwareversion = 'v1.01'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 290    # VRM instance
