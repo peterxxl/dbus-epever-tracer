@@ -12,4 +12,7 @@
 
 # Command to run the driver
 app="python /opt/victronenergy/dbus-epever-tracer/dbus-epever-tracer.py"
+# ``$tty`` is provided by serial-starter and contains the name of the serial
+# device to use, e.g. ttyUSB0.  The helper function ``start`` comes from
+# ``run-service.sh`` and takes care of respawning the driver when it exits.
 start /dev/$tty
