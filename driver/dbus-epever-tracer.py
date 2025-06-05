@@ -84,6 +84,74 @@ exceptionCounter = 0
 # Maps to Victron states: 0=Off, 5=Float, 3=Bulk, 6=Storage
 state = [0,5,3,6]
 
+# Mapping of common EPEVER fault bits to Victron MPPT error codes.  Only
+# a subset of the Victron codes is used as the EPEVER protocol exposes
+# fewer fault conditions.  Unknown or unset bits map to 0 (no error).
+#
+# Battery status register 0x3200 bits:
+#  D3-D0  0x01 over-voltage, 0x02 under-voltage, 0x03 low-voltage disconnect,
+#         0x04 fault
+#  D5-D4  0x10 over-temperature, 0x20 low-temperature
+#
+# Charger status register 0x3201 bits:
+#  D15-D14 input voltage status (2 = over-voltage, 3 = error)
+#  D13..D7 various MOSFET and short-circuit faults
+#  D10 input over-current
+#  D4  PV shorted
+# Victron MPPT error codes relevant for mapping EPEVER faults.  The values
+# come from the Victron documentation.  Only a subset is currently used:
+#   0  = No error
+#   1  = Battery temperature too high
+#   2  = Battery voltage too high
+#   17 = Charger temperature too high
+#   18 = Charger over-current
+#   19 = Charger current polarity reversed (used for PV short)
+#   34 = Input current too high
+ERROR_MAP = {
+    'no_error': 0,
+    'battery_temp_high': 1,
+    'battery_voltage_high': 2,
+    'charger_temp_high': 17,
+    'charger_over_current': 18,
+    'charger_current_reversed': 19,
+    'input_current_high': 34,
+}
+
+def map_epever_error(batt_status, chg_status):
+    """Translate EPEVER status bits to a Victron MPPT error code."""
+    # Battery related errors first
+    batt_state = batt_status & 0x000F
+    if batt_state == 0x01:
+        return ERROR_MAP['battery_voltage_high']
+
+    # Battery temperature flags
+    if batt_status & 0x10:
+        return ERROR_MAP['battery_temp_high']
+
+    # Input voltage errors
+    inp_status = (chg_status >> 14) & 0x03
+    if inp_status == 3:
+        return ERROR_MAP['input_current_high']
+
+    # MOSFET and short circuit faults
+    if chg_status & (1 << 13):
+        return ERROR_MAP['charger_over_current']
+    if chg_status & (1 << 12):
+        return ERROR_MAP['charger_over_current']
+    if chg_status & (1 << 11):
+        return ERROR_MAP['charger_over_current']
+    if chg_status & (1 << 10):
+        return ERROR_MAP['input_current_high']
+    if chg_status & (1 << 8):
+        return ERROR_MAP['charger_over_current']
+    if chg_status & (1 << 7):
+        return ERROR_MAP['charger_temp_high']
+    if chg_status & (1 << 4):
+        return ERROR_MAP['charger_current_reversed']
+
+    # No error conditions detected
+    return 0
+
 # ===============================
 # Modbus RTU initialization
 # ===============================
@@ -250,8 +318,10 @@ class DbusEpever(object):
             self._dbusservice['/Pv/V'] = c3100[0]/100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 8)/100)
             self._dbusservice['/Load/I'] = c3100[13]/100
-            self._dbusservice['/WarningCode'] = c3200[0]
-            self._dbusservice['/ErrorCode'] = c3200[1]
+
+            # Calculate the Victron compatible error code from the EPEVER
+            # battery and charger status registers.
+            self._dbusservice['/ErrorCode'] = map_epever_error(c3200[0], c3200[1])
 
             # Map EPEVER charger state to Victron state for VRM compatibility
             # Victron: 0=Off, 2=Fault, 3=Bulk, 4=Absorption, 5=Float, 6=Storage, 7=Equalize
