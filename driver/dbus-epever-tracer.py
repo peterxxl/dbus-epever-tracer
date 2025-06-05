@@ -92,7 +92,13 @@ else:
     sys.exit()
 
 # Configure Modbus RTU connection parameters for EPEVER Tracer
-controller = minimalmodbus.Instrument('/dev/ttyUSB0', 1)  # Default fallback (usually overwritten above)
+# Modbus register addresses (for clarity and maintainability)
+REGISTER_PV_BATTERY = 0x3100
+REGISTER_CHARGER_STATE = 0x3200
+REGISTER_HISTORY = 0x3300
+REGISTER_BOOST_VOLTAGE = 0x9007
+
+# Only instantiate controller once, using the provided port
 controller.serial.baudrate = 115200    # Standard baud rate for EPEVER
 controller.serial.bytesize = 8         # 8 data bits
 controller.serial.parity = serial.PARITY_NONE  # No parity
@@ -104,7 +110,7 @@ controller.clear_buffers_before_each_transaction = True  # Prevents stale data
 
 
 # Print startup message for debugging
-print(__file__ + " is starting up, use -h argument to see optional arguments")
+logging.info(f"{__file__} is starting up, use -h argument to see optional arguments")
 
 # ===============================
 # Main DBus Service Class
@@ -197,21 +203,28 @@ class DbusEpever(object):
         global exceptionCounter
         try:
             # Read main data registers from EPEVER (see protocol docs for meaning)
-            c3100 = controller.read_registers(0x3100,18,4)  # PV, battery, load, temp, etc.
-            c3200 = controller.read_registers(0x3200,3,4)   # Charger state, load state
-            c3300 = controller.read_registers(0x3300,20,4)  # Historical counters
+            c3100 = controller.read_registers(REGISTER_PV_BATTERY, 18, 4)  # PV, battery, load, temp, etc.
+            c3200 = controller.read_registers(REGISTER_CHARGER_STATE, 3, 4)   # Charger state, load state
+            c3300 = controller.read_registers(REGISTER_HISTORY, 20, 4)  # Historical counters
 
             # Read boost and float charging voltages
-            boostchargingvoltage = controller.read_registers(0x9007, 2, 3)
+            boostchargingvoltage = controller.read_registers(REGISTER_BOOST_VOLTAGE, 2, 3)
             #logging.info(f"boost charging voltage: {boostchargingvoltage[0]}, float charging voltage: {boostchargingvoltage[1]}")
 
-        except:
+            # Check lengths to avoid IndexError
+            if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(boostchargingvoltage) >= 2):
+                logging.warning("Modbus read returned unexpected data lengths.")
+                return True
+        except Exception as e:
             # On communication error, increment error counter and exit after 3 failures
-            print(exceptions)
-            exceptionCounter +=1
-            if exceptionCounter  >= 3:
-                exit()
-        else            exceptionCounter = 0  # Reset on success
+            logging.exception("Exception occurred during Modbus read: %s", e)
+            exceptionCounter += 1
+            if exceptionCounter >= 3:
+                logging.critical("Too many Modbus failures, exiting.")
+                sys.exit(1)
+            return True
+        else:
+            exceptionCounter = 0  # Reset on success
             # Prevent divide by zero for PV voltage (min 0.01 so PV current can be calculated)
             if c3100[0] < 1:
                 c3100[0] = 1
@@ -220,7 +233,7 @@ class DbusEpever(object):
             self._dbusservice['/Dc/0/Current'] = c3100[5]/100.0
             self._dbusservice['/Dc/0/Temperature'] = c3100[16]/100
             self._dbusservice['/Pv/V'] = c3100[0]/100
-            self._dbusservice['/Yield/Power'] =round((c3100[2] | c3100[3] << 8)/100)
+            self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 8)/100)
             self._dbusservice['/Load/I'] = c3100[13]/100
 
             # Map EPEVER charger state to Victron state for VRM compatibility
@@ -232,9 +245,9 @@ class DbusEpever(object):
                 self._dbusservice['/State'] = 4
 
             self._dbusservice['/Load/State'] = c3200[2]
-            self._dbusservice['/Yield/User'] =(c3300[18] | c3300[19] << 8)/100
-            self._dbusservice['/Yield/System'] =(c3300[18] | c3300[19] << 8)/100
-            self._dbusservice['/History/Daily/0/Yield'] =(c3300[12] | c3300[13] << 8)/100
+            self._dbusservice['/Yield/User'] = (c3300[18] | c3300[19] << 8)/100
+            self._dbusservice['/Yield/System'] = (c3300[18] | c3300[19] << 8)/100
+            self._dbusservice['/History/Daily/0/Yield'] = (c3300[12] | c3300[13] << 8)/100
 
             # Update historical max/min statistics (overall and daily)
             if self._dbusservice['/Pv/V'] > self._dbusservice['/History/Overall/MaxPvVoltage']:
