@@ -53,7 +53,8 @@ fi
 	# Add dbus-epever-tracer service entry to serial-starter.conf
 	sed -i '/service.*imt.*dbus-imt-si-rs485tc/a service epever		dbus-epever-tracer' /etc/venus/serial-starter.conf
 	# Add udev rule for USB Serial devices
-	sed -i '$aACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="USB_Serial",          ENV{VE_SERVICE}="epever"' /etc/udev/rules.d/serial-starter.rules
+    # Add udev rule for Victron Energy USB RS485 cable (FT232R chipset)
+    sed -i '$a# Epever Tracer: auto-start service for Victron Energy USB RS485 cable (FT232R chipset)\nACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="FT232R_USB_UART",            ENV{VE_SERVICE}="epever"' /etc/udev/rules.d/serial-starter.rules
 
 	# Step 5: Make driver and service scripts executable
 	echo "Install driver"
