@@ -6,7 +6,7 @@
 
 > **Tested Hardware & Software**
 >
-> - **Victron Cerbo-S GX** running **Venus OS v3.12**
+> - **Victron Cerbo-S GX** running **Venus OS v3.55**
 > - **EPEVER Tracer 3210A MPPT Solar Charge Controller**
 > - **Victron Energy USB RS485 cable (FT232R chipset)** — recommended and tested
 > - Should also work on other Venus OS devices (GX, Raspberry Pi, etc.) and compatible EPEVER Tracer models
@@ -30,14 +30,13 @@ This open-source driver integrates EPEVER Tracer MPPT solar charge controllers w
 
 - **Victron Venus OS device:** Cerbo GX, Cerbo-S GX, Raspberry Pi, etc.
 - **EPEVER Tracer MPPT** (tested on 3210A, other models may work)
-- **RS485 to USB adapter** (tested with [this adapter](https://amzn.eu/d/56BrzXs))
-- Custom cable may be required for some setups (see below)
+- **RS485 to USB adapter** (tested with Victron Energy USB RS485 cable (FT232R chipset))
 
 ---
 
 ## Software Requirements
 
-- **Venus OS v3.12** (other versions may work, but this is tested)
+- **Venus OS v3.55** (other versions may work, but this is tested)
 - Root access to your Venus OS device
 - Internet connection for installation
 

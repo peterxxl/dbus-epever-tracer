@@ -47,7 +47,7 @@ then
     cd ..
     sed -i '/service.*imt.*dbus-imt-si-rs485tc/a service epever		dbus-epever-tracer' /etc/venus/serial-starter.conf
     # Add udev rule for Victron Energy USB RS485 cable (FT232R chipset)
-    sed -i '$a# Epever Tracer: auto-start service for Victron Energy USB RS485 cable (FT232R chipset)\nACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="FT232R_USB_UART",            ENV{VE_SERVICE}="epever"' /etc/udev/rules.d/serial-starter.rules
+    sed -i '$a\n\n# Epever Tracer: auto-start service for Victron Energy USB RS485 cable (FT232R chipset)\nACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="FT232R_USB_UART",            ENV{VE_SERVICE}="epever"' /etc/udev/rules.d/serial-starter.rules
 
     # Step 5: Make driver and service scripts executable
     echo "[6/6] Finalizing installation..."
@@ -60,10 +60,10 @@ then
     ln -s /data/dbus-epever-tracer/driver /opt/victronenergy/dbus-epever-tracer
     ln -s /data/dbus-epever-tracer/service /opt/victronenergy/service-templates/dbus-epever-tracer
 
-    # Final step: Prompt user to reboot
-    echo "To finish, reboot the Venus OS device"
-
     echo "[6/6] Installation complete!"
+	
+	# Final step: Prompt user to reboot
+    echo "To finish, reboot the Venus OS device"
 else
     echo "\nInstallation cancelled by user. No changes were made."
 fi
