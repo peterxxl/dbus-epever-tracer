@@ -34,40 +34,36 @@ then
     rm master.zip
 
     echo "[4/6] Organizing driver and library folders..."
+    # Create directory for velib_python library and copy files
     mkdir -p dbus-epever-tracer/ext/velib_python
     cp -R dbus-epever-tracer-master/* dbus-epever-tracer
     cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
 
-    echo "Cleaning up temporary files..."
+    echo "[5/6] Cleaning up temporary files and adding service entries..."
+    # Remove temporary files
     rm -r velib_python-master
     rm -r dbus-epever-tracer-master
-
-    echo "[5/6] Adding service entries to serial-starter and udev rules (if needed)..."
+    # Add dbus-epever-tracer service entry to serial-starter.conf
     cd ..
-    # (Add your service/udev rule steps here if required)
-
-    echo "[6/6] Installation complete!"
-    echo "To finish, set up your serial device and reboot your Venus OS device."
-else
-    echo "\nInstallation cancelled by user. No changes were made."
-fi
-	# Add dbus-epever-tracer service entry to serial-starter.conf
-	sed -i '/service.*imt.*dbus-imt-si-rs485tc/a service epever		dbus-epever-tracer' /etc/venus/serial-starter.conf
-	# Add udev rule for USB Serial devices
+    sed -i '/service.*imt.*dbus-imt-si-rs485tc/a service epever		dbus-epever-tracer' /etc/venus/serial-starter.conf
     # Add udev rule for Victron Energy USB RS485 cable (FT232R chipset)
     sed -i '$a# Epever Tracer: auto-start service for Victron Energy USB RS485 cable (FT232R chipset)\nACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="FT232R_USB_UART",            ENV{VE_SERVICE}="epever"' /etc/udev/rules.d/serial-starter.rules
 
-	# Step 5: Make driver and service scripts executable
-	echo "Install driver"
-	chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
-	chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
-	chmod +x /data/dbus-epever-tracer/service/run
-	chmod +x /data/dbus-epever-tracer/service/log/run
+    # Step 5: Make driver and service scripts executable
+    echo "[6/6] Finalizing installation..."
+    chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
+    chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
+    chmod +x /data/dbus-epever-tracer/service/run
+    chmod +x /data/dbus-epever-tracer/service/log/run
 
-	# Step 6: Create symbolic links for driver and service templates
-	ln -s /data/dbus-epever-tracer/driver /opt/victronenergy/dbus-epever-tracer
-	ln -s /data/dbus-epever-tracer/service /opt/victronenergy/service-templates/dbus-epever-tracer
+    # Create symbolic links for driver and service templates
+    ln -s /data/dbus-epever-tracer/driver /opt/victronenergy/dbus-epever-tracer
+    ln -s /data/dbus-epever-tracer/service /opt/victronenergy/service-templates/dbus-epever-tracer
 
-	# Final step: Prompt user to reboot
-	echo "To finish, reboot the Venus OS device"
+    # Final step: Prompt user to reboot
+    echo "To finish, reboot the Venus OS device"
+
+    echo "[6/6] Installation complete!"
+else
+    echo "\nInstallation cancelled by user. No changes were made."
 fi
