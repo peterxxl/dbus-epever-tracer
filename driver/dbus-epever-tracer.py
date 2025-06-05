@@ -166,6 +166,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Load/State',None, writeable=True)
         self._dbusservice.add_path('/Load/I',None, gettextcallback=_a)
         self._dbusservice.add_path('/ErrorCode',0)
+        self._dbusservice.add_path('/WarningCode',0)
 
         # Historical statistics (overall and daily)
         self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)         # Max PV voltage seen
@@ -236,6 +237,8 @@ class DbusEpever(object):
             self._dbusservice['/Pv/V'] = c3100[0]/100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 8)/100)
             self._dbusservice['/Load/I'] = c3100[13]/100
+            self._dbusservice['/WarningCode'] = c3200[0]
+            self._dbusservice['/ErrorCode'] = c3200[1]
 
             # Map EPEVER charger state to Victron state for VRM compatibility
             # Victron: 0=Off, 2=Fault, 3=Bulk, 4=Absorption, 5=Float, 6=Storage, 7=Equalize
