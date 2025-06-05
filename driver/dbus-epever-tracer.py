@@ -8,23 +8,28 @@
 # exposes data in a format compatible with Victron's ecosystem (VRM, GX devices).
 # ------------------------------------------------------------------------------
 
-"""
-DBus service for EPEVER Tracer solar charge controller integration with Venus OS.
+"""Driver for exposing EPEVER Tracer MPPT data on the system DBus.
 
-This module implements a DBus service that communicates with an EPEVER Tracer solar
-charge controller using Modbus RTU protocol and exposes the data on the system DBus
-following the Victron Energy standards. This allows integration with the Venus OS
-environment and other Victron Energy products.
+This module implements the glue between an EPEVER Tracer solar charge controller
+and Victron's DBus based ecosystem.  It communicates with the controller over
+Modbus RTU and publishes the retrieved information using the same interface that
+official Victron devices use.  Running this service on a Venus OS device allows
+the Tracer controller to be monitored from VRM or any other Victron tool that
+speaks DBus.
 
-Features:
-- Real-time monitoring of solar charge controller parameters
-- Standardized DBus interface compatible with Venus OS
-- Support for Modbus RTU communication
-- Automatic reconnection on communication errors
+The code was written with simplicity in mind so only a single file is required
+to run the service.  Where appropriate, comments reference the Victron DBus
+paths that are being populated.
 
-References:
-- Victron Energy DBus API: https://github.com/victronenergy/venus/wiki/dbus
-- EPEVER Tracer Modbus Protocol: Consult EPEVER Tracer documentation
+Features
+--------
+* Real-time monitoring of charger, battery and PV parameters.
+* Historical statistics exported in the format expected by VRM.
+* Automatic reconnection and basic error handling on serial failures.
+
+Useful references when extending this driver are:
+`Victron Energy DBus API <https://github.com/victronenergy/venus/wiki/dbus>`__
+and the official EPEVER Tracer Modbus documentation.
 """
 
 
@@ -187,10 +192,13 @@ logging.info(f"{__file__} is starting up, use -h argument to see optional argume
 
 class DbusEpever(object):
     def __init__(self, paths):
-        """
-        Initialize the DBus service instance.
+        """Create and register the DBus service.
 
-        :param paths: Not used in this implementation.
+        Parameters
+        ----------
+        paths : dict
+            Dictionary of DBus paths.  It is kept for compatibility with
+            other drivers but is currently unused.
         """
         self._dbusservice = VeDbusService(servicename)
         self._paths = paths
@@ -234,6 +242,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Load/State',None, writeable=True)
         self._dbusservice.add_path('/Load/I',None, gettextcallback=_a)
         self._dbusservice.add_path('/ErrorCode',0)
+        self._dbusservice.add_path('/WarningCode',0)
 
         # Historical statistics (overall and daily)
         self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)         # Max PV voltage seen
@@ -260,12 +269,17 @@ class DbusEpever(object):
         GLib.timeout_add(1000, self._update)
 
     def _update(self):
-        """
-        Periodic update function. Reads Modbus registers from the EPEVER controller
-        and updates all DBus paths with the latest values. Handles exceptions and
-        communication errors gracefully.
+        """Read registers and publish the latest values on DBus.
+
+        The Tracer exposes most values in a set of Modbus holding registers. On
+        every timer tick we read the required blocks, translate them into the
+        units expected by Victron devices and push them onto the service object.
+        Any communication failure is logged and after a number of consecutive
+        errors the driver exits so that the supervisor can restart it.
         """
 
+        # Helper to test individual bits in the state registers returned by the
+        # controller. ``num`` is the integer value, ``i`` the bit position.
         def getBit(num, i):
             return ((num & (1 << i)) != 0)
 
@@ -304,6 +318,7 @@ class DbusEpever(object):
             self._dbusservice['/Pv/V'] = c3100[0]/100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 8)/100)
             self._dbusservice['/Load/I'] = c3100[13]/100
+
             # Calculate the Victron compatible error code from the EPEVER
             # battery and charger status registers.
             self._dbusservice['/ErrorCode'] = map_epever_error(c3200[0], c3200[1])
@@ -356,6 +371,13 @@ class DbusEpever(object):
 # Main entry point
 # ===============================
 def main():
+    """Entry point when executed as a stand‑alone script.
+
+    The service relies on the GLib main loop provided by ``dbus.mainloop.glib``
+    for asynchronous DBus handling.  Once the service object has been created,
+    control is handed over to GLib which keeps the process alive indefinitely.
+    """
+
     logging.basicConfig(level=logging.DEBUG)
 
     from dbus.mainloop.glib import DBusGMainLoop
