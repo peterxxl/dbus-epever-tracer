@@ -1,48 +1,55 @@
 #!/bin/bash
 
-# Prompt the user for confirmation before proceeding with the installation
-read -p "Install Epever Solarcharger on Venus OS at your own risk? [Y to proceed]" -n 1 -r
+# ===============================
+# Epever Tracer Venus OS Installer
+# ===============================
+# This script installs the Epever Tracer driver and its dependencies on Venus OS.
+# It will install required Python packages, download the driver and libraries,
+# and organize everything for you. Use at your own risk!
+
+read -p "Install Epever Tracer on Venus OS at your own risk? [Y to proceed]" -n 1 -r
 echo    # Move to a new line for readability
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-	# Step 1: Install Python pip3 and minimalmodbus library
-	echo "Download and install pip3 and minimalmodbus"
+    echo "\n[1/6] Installing Python3 pip and minimalmodbus library..."
+    # Update opkg package list
+    opkg update
+    # Install Python3 pip
+    opkg install python3-pip
+    # Install or upgrade minimalmodbus Python library
+    pip3 install -U minimalmodbus
 
-	# Update opkg package list
-	opkg update
-	# Install Python3 pip
-	opkg install python3-pip
-	# Install or upgrade minimalmodbus Python library
-	pip3 install -U minimalmodbus
+    echo "[2/6] Downloading latest dbus-epever-tracer driver..."
+    cd /data
+    wget -q --show-progress https://github.com/peterxxl/dbus-epever-tracer/archive/master.zip
+    echo "Unzipping driver..."
+    unzip -q master.zip
+    rm master.zip
 
-	# Step 2: Download driver and supporting library
-	echo "Download driver and library"
+    echo "[3/6] Downloading latest Victron velib_python library..."
+    wget -q --show-progress https://github.com/victronenergy/velib_python/archive/master.zip
+    echo "Unzipping library..."
+    unzip -q master.zip
+    rm master.zip
 
-	# Change directory to /data for installation
-	cd /data
+    echo "[4/6] Organizing driver and library folders..."
+    mkdir -p dbus-epever-tracer/ext/velib_python
+    cp -R dbus-epever-tracer-master/* dbus-epever-tracer
+    cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
 
-	# Download and extract dbus-epever-tracer driver
-	wget https://github.com/peterxxl/dbus-epever-tracer/archive/master.zip
-	unzip master.zip
-	rm master.zip
+    echo "Cleaning up temporary files..."
+    rm -r velib_python-master
+    rm -r dbus-epever-tracer-master
 
-	# Download and extract velib_python library
-	wget https://github.com/victronenergy/velib_python/archive/master.zip
-	unzip master.zip
-	rm master.zip
+    echo "[5/6] Adding service entries to serial-starter and udev rules (if needed)..."
+    cd ..
+    # (Add your service/udev rule steps here if required)
 
-	# Step 3: Organize extracted files into the correct directories
-	mkdir -p dbus-epever-tracer/ext/velib_python
-    	cp -R dbus-epever-tracer-master/* dbus-epever-tracer
-	cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
-
-	# Remove the now-unneeded extracted folders
-	rm -r velib_python-master
-	rm -r dbus-epever-tracer-master
-
-	# Step 4: Add service entries to serial-starter and udev rules
-	echo "Add entries to serial-starter"
-	cd ..
+    echo "[6/6] Installation complete!"
+    echo "To finish, set up your serial device and reboot your Venus OS device."
+else
+    echo "\nInstallation cancelled by user. No changes were made."
+fi
 	# Add dbus-epever-tracer service entry to serial-starter.conf
 	sed -i '/service.*imt.*dbus-imt-si-rs485tc/a service epever		dbus-epever-tracer' /etc/venus/serial-starter.conf
 	# Add udev rule for USB Serial devices
