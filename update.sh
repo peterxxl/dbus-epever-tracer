@@ -1,6 +1,6 @@
 #!/bin/bash
 
-read -p "Install Epever Solarcharger on Venus OS at your own risk? [Y to proceed]" -n 1 -r
+read -p "Update Epever Solarcharger on Venus OS at your own risk? [Y to proceed]" -n 1 -r
 echo    # (optional) move to a new line
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
