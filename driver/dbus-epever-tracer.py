@@ -1,32 +1,45 @@
 #!/usr/bin/env python3
 
 """
-A class to put a simple service on the dbus, according to victron standards, with constantly updating
-paths. See example usage below. It is used to generate dummy data for other processes that rely on the
-dbus. See files in dbus_vebus_to_pvinverter/test and dbus_vrm/test for other usage examples.
+DBus service for EPEVER Tracer solar charge controller integration with Venus OS.
 
-To change a value while testing, without stopping your dummy script and changing its initial value, write
-to the dummy data via the dbus. See example.
+This module implements a DBus service that communicates with an EPEVER Tracer solar
+charge controller using Modbus RTU protocol and exposes the data on the system DBus
+following the Victron Energy standards. This allows integration with the Venus OS
+environment and other Victron Energy products.
 
-https://github.com/victronenergy/dbus_vebus_to_pvinverter/tree/master/test
+Features:
+- Real-time monitoring of solar charge controller parameters
+- Standardized DBus interface compatible with Venus OS
+- Support for Modbus RTU communication
+- Automatic reconnection on communication errors
+
+References:
+- Victron Energy DBus API: https://github.com/victronenergy/venus/wiki/dbus
+- EPEVER Tracer Modbus Protocol: Consult EPEVER Tracer documentation
 """
-from asyncio import exceptions
-import gettext
-#from webbrowser import get
-from gi.repository import GLib
-import dbus
-import dbus.service
-import platform
-import argparse
-import logging
+
+# Standard library imports
 import sys
 import os
-import minimalmodbus
-import serial
+import logging
+import platform
+import argparse
+from asyncio import exceptions
+import gettext
 
-# our own packages
+# Third-party imports
+from gi.repository import GLib  # For main event loop
+import dbus
+import dbus.service  # For DBus service implementation
+import minimalmodbus  # For Modbus RTU communication
+import serial  # For serial port handling
+
+# Add local library path
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), '../ext/velib_python'))
-from vedbus import VeDbusService
+
+# Local application imports
+from vedbus import VeDbusService  # Victron's DBus service implementation
 
 # Variables
 softwareversion = '0.9'
