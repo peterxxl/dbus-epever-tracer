@@ -78,7 +78,7 @@ productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
 customname = 'Cargador FV'
-firmwareversion = 'v1.02'
+firmwareversion = 'v1.03'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 290    # VRM instance
@@ -214,10 +214,10 @@ class DbusEpever(object):
         # Variables for tracking charge state times
         self._last_update_time = time.time()
         self._current_charge_state = 0  # 0=Off, 3=Bulk, 4=Absorption, 5=Float, 7=Equalize
-        self._time_in_bulk = 0.0        # In hours
-        self._time_in_absorption = 0.0   # In hours
-        self._time_in_float = 0.0       # In hours
-        self._time_in_equalization = 0.0 # In hours
+        self._time_in_bulk = 0.0        # In minutes
+        self._time_in_absorption = 0.0   # In minutes
+        self._time_in_float = 0.0       # In minutes
+        self._time_in_equalization = 0.0 # In minutes
         
         # Day tracking for resetting daily counters
         self._last_day = datetime.now().day
@@ -287,9 +287,9 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 100)                     # Min battery voltage today (V)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryVoltage', 0)                       # Max battery voltage today (V)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryCurrent', 0)                       # Max battery current today (A)
-        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0.01)                           # Time in bulk charge phase (h)
-        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorption', 0.01)                     # Time in absorption (h)
-        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 0.01)                          # Time in float (h)
+        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0)                           # Time in bulk charge phase (min)
+        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorption', 0)                     # Time in absorption (min)
+        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 0)                          # Time in float (min)
         self._dbusservice.add_path('/History/Daily/0/LastError1', 0)                              # Last error today
         
         # Yesterday's statistics (Daily/1)
@@ -298,9 +298,9 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/1/MaxPvVoltage', 0)                            # Max PV voltage yesterday (V)
         self._dbusservice.add_path('/History/Daily/1/MinBatteryVoltage', 100)                     # Min battery voltage yesterday (V)
         self._dbusservice.add_path('/History/Daily/1/MaxBatteryVoltage', 0)                       # Max battery voltage yesterday (V)
-        self._dbusservice.add_path('/History/Daily/1/TimeInBulk', 0.01)                           # Time in bulk charge phase yesterday (h)
-        self._dbusservice.add_path('/History/Daily/1/TimeInAbsorption', 0.01)                     # Time in absorption yesterday (h)
-        self._dbusservice.add_path('/History/Daily/1/TimeInFloat', 0.01)                          # Time in float yesterday (h)
+        self._dbusservice.add_path('/History/Daily/1/TimeInBulk', 0)                           # Time in bulk charge phase yesterday (min)
+        self._dbusservice.add_path('/History/Daily/1/TimeInAbsorption', 0)                     # Time in absorption yesterday (min)
+        self._dbusservice.add_path('/History/Daily/1/TimeInFloat', 0)                          # Time in float yesterday (min)
         #self._dbusservice.add_path('/History/Daily/0/Nr', 1)  # Uncomment for advanced daily tracking
 
         #self._dbusservice.add_path('/100/Relay/0/State', 1, writeable=True)
@@ -378,17 +378,17 @@ class DbusEpever(object):
             
             # Update charge phase time tracking
             now = time.time()
-            time_diff_hours = (now - self._last_update_time) / 3600.0  # Convert seconds to hours
+            time_diff_minutes = (now - self._last_update_time) / 60.0  # Convert seconds to minutes
             
             # Increment the appropriate time counter based on charge state
             if self._current_charge_state == 3:  # Bulk
-                self._time_in_bulk += time_diff_hours
+                self._time_in_bulk += time_diff_minutes
             elif self._current_charge_state == 4:  # Absorption
-                self._time_in_absorption += time_diff_hours
+                self._time_in_absorption += time_diff_minutes
             elif self._current_charge_state == 5:  # Float
-                self._time_in_float += time_diff_hours
+                self._time_in_float += time_diff_minutes
             elif self._current_charge_state == 7:  # Equalization
-                self._time_in_equalization += time_diff_hours
+                self._time_in_equalization += time_diff_minutes
                 
             # Check for day transition and reset counters if needed
             current_day = datetime.now().day
@@ -397,6 +397,7 @@ class DbusEpever(object):
                 logging.info("New day detected, resetting daily counters and saving yesterday's data")
                 
                 # Save today's accumulated values as yesterday's values
+                # For yield, we use the current day's value since yesterday's yield is not available in Epever registers
                 self._yesterday_yield = self._dbusservice['/History/Daily/0/Yield']
                 self._yesterday_max_power = self._dbusservice['/History/Daily/0/MaxPower']
                 self._yesterday_max_pv_voltage = self._dbusservice['/History/Daily/0/MaxPvVoltage']
