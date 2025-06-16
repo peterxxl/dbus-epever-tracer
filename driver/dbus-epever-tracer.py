@@ -261,8 +261,7 @@ class DbusEpever(object):
 
         self._dbusservice.add_path('/Dc/0/Current', None, gettextcallback=_a)
         self._dbusservice.add_path('/Dc/0/Voltage', None, gettextcallback=_v)
-        self._dbusservice.add_path('/Dc/0/Power', None, gettextcallback=_w)
-        self._dbusservice.add_path('/Dc/0/Temperature', None, gettextcallback=_c)
+
         self._dbusservice.add_path('/State',None)
         self._dbusservice.add_path('/Pv/V', None, gettextcallback=_v)
         self._dbusservice.add_path('/Yield/Power', None, gettextcallback=_w)
@@ -366,8 +365,6 @@ class DbusEpever(object):
             # c3100 registers from 0x3100 - PV array and battery data
             self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100      # Register 0x3104: Battery voltage (V), divide by 100
             self._dbusservice['/Dc/0/Current'] = c3100[5]/100      # Register 0x3105: Battery charging current (A), divide by 100
-            self._dbusservice['/Dc/0/Power'] = c3100[6]/100        # Register 0x3106: Battery charging power (W), divide by 100
-            self._dbusservice['/Dc/0/Temperature'] = c3100[16]/100 # Register 0x3110: Battery temperature (°C), divide by 100
             self._dbusservice['/Pv/V'] = c3100[0]/100              # Register 0x3100: PV array voltage (V), divide by 100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 8)/100) # Registers 0x3102-0x3103: PV array charging power (W), divide by 100
             self._dbusservice['/Load/I'] = c3100[13]/100           # Register 0x310D: Load current (A), divide by 100
