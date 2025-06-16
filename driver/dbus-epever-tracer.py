@@ -343,7 +343,7 @@ class DbusEpever(object):
             #logging.info(f"boost charging voltage: {boostchargingvoltage[0]}, float charging voltage: {boostchargingvoltage[1]}")
 
             # Check lengths to avoid IndexError
-            if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(c3310) >= 2 and len(boostchargingvoltage) >= 2):
+            if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(c330C) >= 2 and len(boostchargingvoltage) >= 2):
                 logging.warning("Modbus read returned unexpected data lengths.")
                 return True
         except Exception as e:
