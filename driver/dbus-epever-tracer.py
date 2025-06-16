@@ -176,7 +176,6 @@ REGISTER_PV_BATTERY = 0x3100  # PV array voltage, current, power, etc.
 REGISTER_CHARGER_STATE = 0x3200  # Charging status, charging stage, etc.
 REGISTER_HISTORY = 0x3300  # Historical generated energy data
 REGISTER_HISTORY_DAILY = 0x330C  # Daily historical generated energy data
-REGISTER_HISTORY_PREV_DAY = 0x3311  # Previous day's generated energy data
 REGISTER_PARAMETERS = 0x9000  # Charging and load parameters
 REGISTER_BOOST_VOLTAGE = 0x9002  # Boost voltage setpoint
 
@@ -334,9 +333,9 @@ class DbusEpever(object):
             # Contains: Maximum and daily PV voltage, current, power, battery temp, generated energy
             c3300 = controller.read_registers(REGISTER_HISTORY, 20, 4)  # c3300[0-19]: Registers 0x3300-0x3313
            
-            # REGISTER_HISTORY_PREV_DAY (0x330C): Previous day historical data (2 registers)
+            # REGISTER_HISTORY_DAILY (0x330C): Previous day historical data (2 registers)
             # Contains: Previous day's generated energy
-            c3310 = controller.read_registers(REGISTER_HISTORY_PREV_DAY, 2, 4)  # c3310[0-1]: Registers 0x330C-0x330D
+            c330C = controller.read_registers(REGISTER_HISTORY_DAILY, 2, 4)  # c330C[0-1]: Registers 0x330C-0x330D
 
             # REGISTER_BOOST_VOLTAGE (0x9002): Battery charging parameters
             # Contains: Boost and float charging voltage setpoints
@@ -457,17 +456,17 @@ class DbusEpever(object):
             
             # Registers 0x3312-0x3313: Total generated energy (kWh), divide by 100
             # Combine two 16-bit registers into one 32-bit value
-            self._dbusservice['/Yield/User'] = (c3300[18] | c3300[19] << 8)/100
-            self._dbusservice['/Yield/System'] = (c3300[18] | c3300[19] << 8)/100
+            self._dbusservice['/Yield/User'] = (c3300[12] | c3300[13] << 8)/100
+            self._dbusservice['/Yield/System'] = (c3300[12] | c3300[13] << 8)/100
             
             # Registers 0x330C-0x330D: Daily generated energy (kWh), divide by 100
             # Used as today's yield value
-            self._dbusservice['/History/Daily/0/Yield'] = (c3300[12] | c3300[13] << 8)/100
+            self._dbusservice['/History/Daily/0/Yield'] = (c330C[0] | c330C[1] << 8)/100
             
             # Update yesterday's yield from EPEVER registers
             # Registers at REGISTER_HISTORY_PREV_DAY (0x330C): Previous day's energy
-            # c3310[0-1] contains yesterday's generated energy
-            yesterday_yield = (c3310[0] | c3310[1] << 8)/100
+            # c330C[0-1] contains yesterday's generated energy
+            yesterday_yield = (c330C[0] | c330C[1] << 8)/100
             if yesterday_yield > 0:
                 self._dbusservice['/History/Daily/1/Yield'] = yesterday_yield
 
