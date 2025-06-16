@@ -81,7 +81,7 @@ customname = 'Cargador FV'
 firmwareversion = 'v1.04'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
-deviceinstance = 290    # VRM instance
+deviceinstance = 278    # VRM instance
 exceptionCounter = 0
 # State mapping for EPEVER to Victron charger states:
 # Indexes: [00 01 10 11] where bits are [discharge, charge]
@@ -252,7 +252,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
         self._dbusservice.add_path('/Connected', 1)
         self._dbusservice.add_path('/Serial', serialnumber)
-        self._dbusservice.add_path('/CustomName', customname, writeable=True)
+        self._dbusservice.add_path('/Devices/0/CustomName', customname, writeable=True)
 
         # Network and BMS status (optional, for completeness)
         self._dbusservice.add_path('/Link/NetworkMode', 0)      # 0 = Standalone
