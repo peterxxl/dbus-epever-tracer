@@ -396,7 +396,7 @@ class DbusEpever(object):
             
             # Update charge phase time tracking
             now = time.time()
-            time_diff_minutes = (now - self._last_update_time) / 60.0  # Convert seconds to minutes
+            time_diff_minutes = int((now - self._last_update_time) / 60)  # Convert seconds to minutes as integer
             
             # Increment the appropriate time counter based on charge state
             if self._current_charge_state == 3:  # Bulk
@@ -429,9 +429,9 @@ class DbusEpever(object):
                 self._dbusservice['/History/Daily/1/MaxPvVoltage'] = self._yesterday_max_pv_voltage
                 self._dbusservice['/History/Daily/1/MinBatteryVoltage'] = self._yesterday_min_battery_voltage
                 self._dbusservice['/History/Daily/1/MaxBatteryVoltage'] = self._yesterday_max_battery_voltage
-                self._dbusservice['/History/Daily/1/TimeInBulk'] = round(self._yesterday_time_in_bulk, 2)
-                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = round(self._yesterday_time_in_absorption, 2)
-                self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 2)
+                self._dbusservice['/History/Daily/1/TimeInBulk'] = self._yesterday_time_in_bulk
+                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = self._yesterday_time_in_absorption
+                self._dbusservice['/History/Daily/1/TimeInFloat'] = self._yesterday_time_in_float
                 
                 # Reset today's counters
                 self._time_in_bulk = 0
