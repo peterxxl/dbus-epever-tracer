@@ -426,9 +426,9 @@ class DbusEpever(object):
                 self._dbusservice['/History/Daily/1/MaxPvVoltage'] = self._yesterday_max_pv_voltage
                 self._dbusservice['/History/Daily/1/MinBatteryVoltage'] = self._yesterday_min_battery_voltage
                 self._dbusservice['/History/Daily/1/MaxBatteryVoltage'] = self._yesterday_max_battery_voltage
-                self._dbusservice['/History/Daily/1/TimeInBulk'] = round(self._yesterday_time_in_bulk, 1)
-                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = round(self._yesterday_time_in_absorption, 1)
-                self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 1)
+                self._dbusservice['/History/Daily/1/TimeInBulk'] = round(self._yesterday_time_in_bulk, 0)
+                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = round(self._yesterday_time_in_absorption, 0)
+                self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 0)
                 
                 # Reset today's counters
                 self._time_in_bulk = 0.0
@@ -444,9 +444,9 @@ class DbusEpever(object):
                 self._last_day = current_day
             
             # Update the DBus paths with accumulated times for today (rounded to 1 decimal place)
-            self._dbusservice['/History/Daily/0/TimeInBulk'] = round(self._time_in_bulk, 1)
-            self._dbusservice['/History/Daily/0/TimeInAbsorption'] = round(self._time_in_absorption, 1)
-            self._dbusservice['/History/Daily/0/TimeInFloat'] = round(self._time_in_float, 1)
+            self._dbusservice['/History/Daily/0/TimeInBulk'] = round(self._time_in_bulk, 0)
+            self._dbusservice['/History/Daily/0/TimeInAbsorption'] = round(self._time_in_absorption, 0)
+            self._dbusservice['/History/Daily/0/TimeInFloat'] = round(self._time_in_float, 0)
             
             # Store current state for next iteration
             self._current_charge_state = current_state
