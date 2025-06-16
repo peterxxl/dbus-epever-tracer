@@ -214,9 +214,9 @@ class DbusEpever(object):
         # Variables for tracking charge state times
         self._last_update_time = time.time()
         self._current_charge_state = 0  # 0=Off, 3=Bulk, 4=Absorption, 5=Float, 7=Equalize
-        self._time_in_bulk = 0          # In minutes
-        self._time_in_absorption = 0    # In minutes
-        self._time_in_float = 0         # In minutes
+        self._time_in_bulk = 0.0          # In minutes (float with 1 decimal place)
+        self._time_in_absorption = 0.0    # In minutes (float with 1 decimal place)
+        self._time_in_float = 0.0         # In minutes (float with 1 decimal place)
         
         # Day tracking for resetting daily counters
         self._last_day = datetime.now().day
@@ -227,9 +227,9 @@ class DbusEpever(object):
         self._yesterday_max_pv_voltage = 0
         self._yesterday_min_battery_voltage = 0
         self._yesterday_max_battery_voltage = 0
-        self._yesterday_time_in_bulk = 0
-        self._yesterday_time_in_absorption = 0
-        self._yesterday_time_in_float = 0
+        self._yesterday_time_in_bulk = 0.0
+        self._yesterday_time_in_absorption = 0.0
+        self._yesterday_time_in_float = 0.0
 
         # Value formatting for DBus display (adds units)
         _kwh = lambda p, v: (str(v) + 'kWh')
@@ -396,7 +396,7 @@ class DbusEpever(object):
             
             # Update charge phase time tracking
             now = time.time()
-            time_diff_minutes = int((now - self._last_update_time) / 60)  # Convert seconds to minutes as integer
+            time_diff_minutes = (now - self._last_update_time) / 60  # Convert seconds to minutes as float
             
             # Increment the appropriate time counter based on charge state
             if self._current_charge_state == 3:  # Bulk
@@ -429,14 +429,14 @@ class DbusEpever(object):
                 self._dbusservice['/History/Daily/1/MaxPvVoltage'] = self._yesterday_max_pv_voltage
                 self._dbusservice['/History/Daily/1/MinBatteryVoltage'] = self._yesterday_min_battery_voltage
                 self._dbusservice['/History/Daily/1/MaxBatteryVoltage'] = self._yesterday_max_battery_voltage
-                self._dbusservice['/History/Daily/1/TimeInBulk'] = self._yesterday_time_in_bulk
-                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = self._yesterday_time_in_absorption
-                self._dbusservice['/History/Daily/1/TimeInFloat'] = self._yesterday_time_in_float
+                self._dbusservice['/History/Daily/1/TimeInBulk'] = round(self._yesterday_time_in_bulk, 1)
+                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = round(self._yesterday_time_in_absorption, 1)
+                self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 1)
                 
                 # Reset today's counters
-                self._time_in_bulk = 0
-                self._time_in_absorption = 0
-                self._time_in_float = 0
+                self._time_in_bulk = 0.0
+                self._time_in_absorption = 0.0
+                self._time_in_float = 0.0
                 self._dbusservice['/History/Daily/0/MaxPower'] = 0
                 self._dbusservice['/History/Daily/0/MaxPvVoltage'] = 0
                 self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = 0
@@ -446,10 +446,10 @@ class DbusEpever(object):
                 # Update day tracking
                 self._last_day = current_day
             
-            # Update the DBus paths with accumulated times for today
-            self._dbusservice['/History/Daily/0/TimeInBulk'] = self._time_in_bulk
-            self._dbusservice['/History/Daily/0/TimeInAbsorption'] = self._time_in_absorption
-            self._dbusservice['/History/Daily/0/TimeInFloat'] = self._time_in_float
+            # Update the DBus paths with accumulated times for today (rounded to 1 decimal place)
+            self._dbusservice['/History/Daily/0/TimeInBulk'] = round(self._time_in_bulk, 1)
+            self._dbusservice['/History/Daily/0/TimeInAbsorption'] = round(self._time_in_absorption, 1)
+            self._dbusservice['/History/Daily/0/TimeInFloat'] = round(self._time_in_float, 1)
             
             # Store current state for next iteration
             self._current_charge_state = current_state
