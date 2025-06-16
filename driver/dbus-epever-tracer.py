@@ -214,10 +214,10 @@ class DbusEpever(object):
         # Variables for tracking charge state times
         self._last_update_time = time.time()
         self._current_charge_state = 0  # 0=Off, 3=Bulk, 4=Absorption, 5=Float, 7=Equalize
-        self._time_in_bulk = 0.0        # In minutes
-        self._time_in_absorption = 0.0   # In minutes
-        self._time_in_float = 0.0       # In minutes
-        self._time_in_equalization = 0.0 # In minutes
+        self._time_in_bulk = 0          # In minutes
+        self._time_in_absorption = 0    # In minutes
+        self._time_in_float = 0         # In minutes
+        self._time_in_equalization = 0  # In minutes
         
         # Day tracking for resetting daily counters
         self._last_day = datetime.now().day
@@ -226,11 +226,11 @@ class DbusEpever(object):
         self._yesterday_yield = 0.0
         self._yesterday_max_power = 0
         self._yesterday_max_pv_voltage = 0
-        self._yesterday_min_battery_voltage = 100
+        self._yesterday_min_battery_voltage = 0
         self._yesterday_max_battery_voltage = 0
-        self._yesterday_time_in_bulk = 0.0
-        self._yesterday_time_in_absorption = 0.0
-        self._yesterday_time_in_float = 0.0
+        self._yesterday_time_in_bulk = 0
+        self._yesterday_time_in_absorption = 0
+        self._yesterday_time_in_float = 0
 
         # Value formatting for DBus display (adds units)
         _kwh = lambda p, v: (str(v) + 'kWh')
@@ -274,23 +274,29 @@ class DbusEpever(object):
         self._dbusservice.add_path('/WarningCode',0)
 
         # Historical statistics (overall and daily)
-        self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)         # Max PV voltage seen
-        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 100, gettextcallback=_v)  # Min battery voltage seen
-        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 0, gettextcallback=_v)    # Max battery voltage seen
+        self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)        # Max PV voltage seen
+        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 0, gettextcallback=_v)   # Min battery voltage seen
+        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 0, gettextcallback=_v)   # Max battery voltage seen
         self._dbusservice.add_path('/History/Overall/DaysAvailable', 2)                           # Number of days data available
-        self._dbusservice.add_path('/History/Overall/LastError1', 0)                              # Last error code
+        self._dbusservice.add_path('/History/Overall/LastError1', 0) 
+        self._dbusservice.add_path('/History/Overall/LastError2', 0)                              
+        self._dbusservice.add_path('/History/Overall/LastError3', 0)                              
+        self._dbusservice.add_path('/History/Overall/LastError4', 0)                              
 
         # Today's statistics (Daily/0)
         self._dbusservice.add_path('/History/Daily/0/Yield', 0.0)                                 # Today's yield (kWh)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)                                 # Max power today (W)
         self._dbusservice.add_path('/History/Daily/0/MaxPvVoltage', 0)                            # Max PV voltage today (V)
-        self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 100)                     # Min battery voltage today (V)
+        self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 0)                     # Min battery voltage today (V)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryVoltage', 0)                       # Max battery voltage today (V)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryCurrent', 0)                       # Max battery current today (A)
-        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0)                           # Time in bulk charge phase (min)
-        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorption', 0)                     # Time in absorption (min)
-        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 0)                          # Time in float (min)
+        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0)                              # Time in bulk charge phase (min)
+        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorption', 0)                        # Time in absorption (min)
+        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 0)                             # Time in float (min)
         self._dbusservice.add_path('/History/Daily/0/LastError1', 0)                              # Last error today
+        self._dbusservice.add_path('/History/Daily/0/LastError2', 0)                              # Last error today
+        self._dbusservice.add_path('/History/Daily/0/LastError3', 0)                              # Last error today
+        self._dbusservice.add_path('/History/Daily/0/LastError4', 0)                              # Last error today
         
         # Yesterday's statistics (Daily/1)
         self._dbusservice.add_path('/History/Daily/1/Yield', 0.0)                                 # Yesterday's yield (kWh)
@@ -298,12 +304,13 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/1/MaxPvVoltage', 0)                            # Max PV voltage yesterday (V)
         self._dbusservice.add_path('/History/Daily/1/MinBatteryVoltage', 100)                     # Min battery voltage yesterday (V)
         self._dbusservice.add_path('/History/Daily/1/MaxBatteryVoltage', 0)                       # Max battery voltage yesterday (V)
-        self._dbusservice.add_path('/History/Daily/1/TimeInBulk', 0)                           # Time in bulk charge phase yesterday (min)
-        self._dbusservice.add_path('/History/Daily/1/TimeInAbsorption', 0)                     # Time in absorption yesterday (min)
-        self._dbusservice.add_path('/History/Daily/1/TimeInFloat', 0)                          # Time in float yesterday (min)
-        #self._dbusservice.add_path('/History/Daily/0/Nr', 1)  # Uncomment for advanced daily tracking
-
-        #self._dbusservice.add_path('/100/Relay/0/State', 1, writeable=True)
+        self._dbusservice.add_path('/History/Daily/1/TimeInBulk', 0)                              # Time in bulk charge phase yesterday (min)
+        self._dbusservice.add_path('/History/Daily/1/TimeInAbsorption', 0)                        # Time in absorption yesterday (min)
+        self._dbusservice.add_path('/History/Daily/1/TimeInFloat', 0)                             # Time in float yesterday (min)
+        self._dbusservice.add_path('/History/Daily/1/LastError1', 0)                              # Last error yesterday
+        self._dbusservice.add_path('/History/Daily/1/LastError2', 0)                              # Last error yesterday
+        self._dbusservice.add_path('/History/Daily/1/LastError3', 0)                              # Last error yesterday
+        self._dbusservice.add_path('/History/Daily/1/LastError4', 0)                              # Last error yesterday
 
         # Schedule periodic data updates every 1000 ms (1 second)
         GLib.timeout_add(1000, self._update)
@@ -326,13 +333,24 @@ class DbusEpever(object):
         global exceptionCounter
         try:
             # Read main data registers from EPEVER (see protocol docs for meaning)
-            c3100 = controller.read_registers(REGISTER_PV_BATTERY, 18, 4)  # PV, battery, load, temp, etc.
-            c3200 = controller.read_registers(REGISTER_CHARGER_STATE, 3, 4)   # Charger state, load state
-            c3300 = controller.read_registers(REGISTER_HISTORY, 20, 4)  # Historical counters
-            # Read previous day's energy data (registers 0x3311-0x3312 for previous day energy yield)
-            c3310 = controller.read_registers(REGISTER_HISTORY_PREV_DAY, 2, 4)  # Previous day's data
+            # REGISTER_PV_BATTERY (0x3100): PV array data registers (18 registers)
+            # Contains: PV voltage, current, power, battery voltage/current/temp, etc.
+            c3100 = controller.read_registers(REGISTER_PV_BATTERY, 18, 4)  # c3100[0-17]: Registers 0x3100-0x3111
+            
+            # REGISTER_CHARGER_STATE (0x3200): Battery and charging status registers (3 registers)
+            # Contains: Battery status flags, charging status flags
+            c3200 = controller.read_registers(REGISTER_CHARGER_STATE, 3, 4)  # c3200[0-2]: Registers 0x3200-0x3202
+            
+            # REGISTER_HISTORY (0x3300): Historical statistics registers (20 registers) 
+            # Contains: Maximum and daily PV voltage, current, power, battery temp, generated energy
+            c3300 = controller.read_registers(REGISTER_HISTORY, 20, 4)  # c3300[0-19]: Registers 0x3300-0x3313
+           
+            # REGISTER_HISTORY_PREV_DAY (0x330C): Previous day historical data (2 registers)
+            # Contains: Previous day's generated energy
+            c3310 = controller.read_registers(REGISTER_HISTORY_PREV_DAY, 2, 4)  # c3310[0-1]: Registers 0x330C-0x330D
 
-            # Read boost and float charging voltages
+            # REGISTER_BOOST_VOLTAGE (0x9002): Battery charging parameters
+            # Contains: Boost and float charging voltage setpoints
             boostchargingvoltage = controller.read_registers(REGISTER_BOOST_VOLTAGE, 2, 3)
             #logging.info(f"boost charging voltage: {boostchargingvoltage[0]}, float charging voltage: {boostchargingvoltage[1]}")
 
@@ -354,22 +372,32 @@ class DbusEpever(object):
             if c3100[0] < 1:
                 c3100[0] = 1
 
-            self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100
-            self._dbusservice['/Dc/0/Current'] = c3100[5]/100.0
-            self._dbusservice['/Dc/0/Temperature'] = c3100[16]/100
-            self._dbusservice['/Pv/V'] = c3100[0]/100
-            self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 8)/100)
-            self._dbusservice['/Load/I'] = c3100[13]/100
+            # Register assignments from EPEVER Tracer Modbus map:
+            # c3100 registers from 0x3100 - PV array and battery data
+            self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100      # Register 0x3104: Battery voltage (V), divide by 100
+            self._dbusservice['/Dc/0/Current'] = c3100[5]/100      # Register 0x3105: Battery charging current (A), divide by 100
+            self._dbusservice['/Dc/0/Power'] = c3100[6]/100        # Register 0x3106: Battery charging power (W), divide by 100
+            self._dbusservice['/Dc/0/Temperature'] = c3100[16]/100 # Register 0x3110: Battery temperature (°C), divide by 100
+            self._dbusservice['/Pv/V'] = c3100[0]/100              # Register 0x3100: PV array voltage (V), divide by 100
+            self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 8)/100) # Registers 0x3102-0x3103: PV array charging power (W), divide by 100
+            self._dbusservice['/Load/I'] = c3100[13]/100           # Register 0x310D: Load current (A), divide by 100
 
             # Calculate the Victron compatible error code from the EPEVER
             # battery and charger status registers.
+            # c3200 registers from 0x3200 - Battery status and charging status
+            # c3200[0] = Register 0x3200: Battery status (flags for over/under voltage, temperature, etc.)
+            # c3200[1] = Register 0x3201: Charging status (flags for charging state, PV status, etc.)
             self._dbusservice['/ErrorCode'] = map_epever_error(c3200[0], c3200[1])
 
             # Map EPEVER charger state to Victron state for VRM compatibility
             # Victron: 0=Off, 2=Fault, 3=Bulk, 4=Absorption, 5=Float, 6=Storage, 7=Equalize
             # Epever:  00=No charging, 01=Float, 10=Boost, 11=Equalizing
+            # Bits 2-3 of register 0x3201 (charging status) indicate the charging state
+            # getBit extracts specific bits from the charging status register
             self._dbusservice['/State'] = state[getBit(c3200[1],3)* 2 + getBit(c3200[1],2)]
+            
             # Special case: if in Bulk and battery voltage > float set Absorption
+            # boostchargingvoltage[1] = Register 0x9001: Float charging voltage (x100 V)
             if self._dbusservice['/State'] == 3 and self._dbusservice['/Dc/0/Voltage'] > boostchargingvoltage[1]/100:
                 self._dbusservice['/State'] = 4
                 
@@ -418,10 +446,10 @@ class DbusEpever(object):
                 self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 2)
                 
                 # Reset today's counters
-                self._time_in_bulk = 0.0
-                self._time_in_absorption = 0.0
-                self._time_in_float = 0.0
-                self._time_in_equalization = 0.0
+                self._time_in_bulk = 0
+                self._time_in_absorption = 0
+                self._time_in_float = 0
+                self._time_in_equalization = 0
                 self._dbusservice['/History/Daily/0/MaxPower'] = 0
                 self._dbusservice['/History/Daily/0/MaxPvVoltage'] = 0
                 self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = 100
@@ -432,47 +460,68 @@ class DbusEpever(object):
                 self._last_day = current_day
             
             # Update the DBus paths with accumulated times for today
-            self._dbusservice['/History/Daily/0/TimeInBulk'] = round(self._time_in_bulk, 2)
-            self._dbusservice['/History/Daily/0/TimeInAbsorption'] = round(self._time_in_absorption, 2)
-            self._dbusservice['/History/Daily/0/TimeInFloat'] = round(self._time_in_float, 2)
+            self._dbusservice['/History/Daily/0/TimeInBulk'] = self._time_in_bulk
+            self._dbusservice['/History/Daily/0/TimeInAbsorption'] = self._time_in_absorption
+            self._dbusservice['/History/Daily/0/TimeInFloat'] = self._time_in_float
             
             # Store current state for next iteration
             self._current_charge_state = current_state
             self._last_update_time = now
 
+            # Register 0x3202: Load on/off status
             self._dbusservice['/Load/State'] = c3200[2]
+            
+            # Registers 0x3312-0x3313: Total generated energy (kWh), divide by 100
+            # Combine two 16-bit registers into one 32-bit value
             self._dbusservice['/Yield/User'] = (c3300[18] | c3300[19] << 8)/100
             self._dbusservice['/Yield/System'] = (c3300[18] | c3300[19] << 8)/100
+            
+            # Registers 0x330C-0x330D: Daily generated energy (kWh), divide by 100
+            # Used as today's yield value
             self._dbusservice['/History/Daily/0/Yield'] = (c3300[12] | c3300[13] << 8)/100
             
             # Update yesterday's yield from EPEVER registers
+            # Registers at REGISTER_HISTORY_PREV_DAY (0x330C): Previous day's energy
+            # c3310[0-1] contains yesterday's generated energy
             yesterday_yield = (c3310[0] | c3310[1] << 8)/100
             if yesterday_yield > 0:
                 self._dbusservice['/History/Daily/1/Yield'] = yesterday_yield
 
             # Update historical max/min statistics (overall and daily)
+            # These track the highest/lowest values ever seen for persistent statistics
+            
+            # Track maximum PV voltage ever seen (overall system lifetime)
             if self._dbusservice['/Pv/V'] > self._dbusservice['/History/Overall/MaxPvVoltage']:
                 self._dbusservice['/History/Overall/MaxPvVoltage'] = self._dbusservice['/Pv/V']
 
+            # Track minimum battery voltage ever seen (overall system lifetime)
             if self._dbusservice['/Dc/0/Voltage'] < self._dbusservice['/History/Overall/MinBatteryVoltage']:
                 self._dbusservice['/History/Overall/MinBatteryVoltage'] = self._dbusservice['/Dc/0/Voltage']
 
+            # Track maximum battery voltage ever seen (overall system lifetime)
             if self._dbusservice['/Dc/0/Voltage'] > self._dbusservice['/History/Overall/MaxBatteryVoltage']:
                 self._dbusservice['/History/Overall/MaxBatteryVoltage'] = self._dbusservice['/Dc/0/Voltage']
 
-            # Daily statistics
+            # Daily statistics - these track max/min values for today only
+            # These values will be reset at midnight when the day changes
+            
+            # Track maximum power today (W)
             if self._dbusservice['/Yield/Power'] > self._dbusservice['/History/Daily/0/MaxPower']:
                 self._dbusservice['/History/Daily/0/MaxPower'] = self._dbusservice['/Yield/Power']
 
+            # Track maximum PV voltage today (V)
             if self._dbusservice['/Pv/V'] > self._dbusservice['/History/Daily/0/MaxPvVoltage']:
                 self._dbusservice['/History/Daily/0/MaxPvVoltage'] = self._dbusservice['/Pv/V']
 
+            # Track minimum battery voltage today (V)
             if self._dbusservice['/Dc/0/Voltage'] < self._dbusservice['/History/Daily/0/MinBatteryVoltage']:
                 self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = self._dbusservice['/Dc/0/Voltage']
 
+            # Track maximum battery voltage today (V)
             if self._dbusservice['/Dc/0/Voltage'] > self._dbusservice['/History/Daily/0/MaxBatteryVoltage']:
                 self._dbusservice['/History/Daily/0/MaxBatteryVoltage'] = self._dbusservice['/Dc/0/Voltage']
 
+            # Track maximum battery current today (A)
             if self._dbusservice['/Dc/0/Current'] > self._dbusservice['/History/Daily/0/MaxBatteryCurrent']:
                 self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = self._dbusservice['/Dc/0/Current']
 
