@@ -39,6 +39,7 @@ and the official EPEVER Tracer Modbus documentation.
 import minimalmodbus
 import sys
 import os
+import json
 import logging
 import traceback
 import time
@@ -218,6 +219,13 @@ class DbusEpever(object):
         self._yesterday_time_in_absorption = 0.0
         self._yesterday_time_in_float = 0.0
 
+        # State file path — written after each successful update so daily
+        # accumulators survive a driver restart within the same calendar day.
+        self._state_file = '/data/dbus-epever-tracer/state.json'
+
+        # Restore accumulators from the previous run if the date still matches.
+        self._load_state()
+
         # Value formatting for DBus display (adds units)
         _kwh = lambda p, v: (str(v) + 'kWh')
         _a = lambda p, v: (str(v) + 'A')
@@ -289,6 +297,28 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/1/TimeInFloat', 0)                             # Time in float yesterday (min)
         self._dbusservice.add_path('/History/Daily/1/LastError1', 0)                              # Last error yesterday
    
+        # Restore persisted daily max/min values into the DBus paths so VRM
+        # sees correct numbers immediately after a restart within the same day.
+        try:
+            with open(self._state_file, 'r') as f:
+                s = json.load(f)
+            if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                self._dbusservice['/History/Daily/0/MaxPower'] = s.get('daily_max_power', 0)
+                self._dbusservice['/History/Daily/0/MaxPvVoltage'] = s.get('daily_max_pv_voltage', 0)
+                self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = s.get('daily_min_battery_voltage', 999)
+                self._dbusservice['/History/Daily/0/MaxBatteryVoltage'] = s.get('daily_max_battery_voltage', 0)
+                self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = s.get('daily_max_battery_current', 0)
+                self._dbusservice['/History/Daily/1/Yield'] = self._yesterday_yield
+                self._dbusservice['/History/Daily/1/MaxPower'] = self._yesterday_max_power
+                self._dbusservice['/History/Daily/1/MaxPvVoltage'] = self._yesterday_max_pv_voltage
+                self._dbusservice['/History/Daily/1/MinBatteryVoltage'] = self._yesterday_min_battery_voltage
+                self._dbusservice['/History/Daily/1/MaxBatteryVoltage'] = self._yesterday_max_battery_voltage
+                self._dbusservice['/History/Daily/1/TimeInBulk'] = round(self._yesterday_time_in_bulk, 0)
+                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = round(self._yesterday_time_in_absorption, 0)
+                self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 0)
+        except (FileNotFoundError, Exception):
+            pass
+
         # Schedule periodic data updates every 1000 ms (1 second)
         GLib.timeout_add(1000, self._update)
 
@@ -487,7 +517,67 @@ class DbusEpever(object):
             if self._dbusservice['/Dc/0/Current'] > self._dbusservice['/History/Daily/0/MaxBatteryCurrent']:
                 self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = self._dbusservice['/Dc/0/Current']
 
+            self._save_state()
+
         return True
+
+    # ------------------------------------------------------------------
+    # State persistence helpers
+    # ------------------------------------------------------------------
+
+    def _load_state(self):
+        """Restore daily accumulators from the state file if date matches today."""
+        try:
+            with open(self._state_file, 'r') as f:
+                s = json.load(f)
+            if s.get('date') != datetime.now().strftime('%Y-%m-%d'):
+                logging.info("State file is from a previous day — starting fresh.")
+                return
+            self._time_in_bulk = s.get('time_in_bulk', 0.0)
+            self._time_in_absorption = s.get('time_in_absorption', 0.0)
+            self._time_in_float = s.get('time_in_float', 0.0)
+            self._yesterday_yield = s.get('yesterday_yield', 0.0)
+            self._yesterday_max_power = s.get('yesterday_max_power', 0)
+            self._yesterday_max_pv_voltage = s.get('yesterday_max_pv_voltage', 0)
+            self._yesterday_min_battery_voltage = s.get('yesterday_min_battery_voltage', 0)
+            self._yesterday_max_battery_voltage = s.get('yesterday_max_battery_voltage', 0)
+            self._yesterday_time_in_bulk = s.get('yesterday_time_in_bulk', 0.0)
+            self._yesterday_time_in_absorption = s.get('yesterday_time_in_absorption', 0.0)
+            self._yesterday_time_in_float = s.get('yesterday_time_in_float', 0.0)
+            logging.info("Restored daily accumulators from state file.")
+        except FileNotFoundError:
+            pass  # First run — no state file yet
+        except Exception as e:
+            logging.warning("Could not load state file: %s", e)
+
+    def _save_state(self):
+        """Persist daily accumulators to the state file atomically."""
+        s = {
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'time_in_bulk': self._time_in_bulk,
+            'time_in_absorption': self._time_in_absorption,
+            'time_in_float': self._time_in_float,
+            'daily_max_power': self._dbusservice['/History/Daily/0/MaxPower'],
+            'daily_max_pv_voltage': self._dbusservice['/History/Daily/0/MaxPvVoltage'],
+            'daily_min_battery_voltage': self._dbusservice['/History/Daily/0/MinBatteryVoltage'],
+            'daily_max_battery_voltage': self._dbusservice['/History/Daily/0/MaxBatteryVoltage'],
+            'daily_max_battery_current': self._dbusservice['/History/Daily/0/MaxBatteryCurrent'],
+            'yesterday_yield': self._yesterday_yield,
+            'yesterday_max_power': self._yesterday_max_power,
+            'yesterday_max_pv_voltage': self._yesterday_max_pv_voltage,
+            'yesterday_min_battery_voltage': self._yesterday_min_battery_voltage,
+            'yesterday_max_battery_voltage': self._yesterday_max_battery_voltage,
+            'yesterday_time_in_bulk': self._yesterday_time_in_bulk,
+            'yesterday_time_in_absorption': self._yesterday_time_in_absorption,
+            'yesterday_time_in_float': self._yesterday_time_in_float,
+        }
+        tmp = self._state_file + '.tmp'
+        try:
+            with open(tmp, 'w') as f:
+                json.dump(s, f)
+            os.replace(tmp, self._state_file)  # atomic on Linux
+        except Exception as e:
+            logging.warning("Could not save state file: %s", e)
 
 
 
