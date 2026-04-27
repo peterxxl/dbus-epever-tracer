@@ -333,8 +333,8 @@ class DbusEpever(object):
             # Contains: Maximum and daily PV voltage, current, power, battery temp, generated energy
             c3300 = controller.read_registers(REGISTER_HISTORY, 20, 4)  # c3300[0-19]: Registers 0x3300-0x3313
            
-            # REGISTER_HISTORY_DAILY (0x330C): Previous day historical data (2 registers)
-            # Contains: Previous day's generated energy
+            # REGISTER_HISTORY_DAILY (0x330C): Generated energy today (2 registers, cleared at midnight)
+            # Contains: Today's generated energy (low word, high word)
             c330C = controller.read_registers(REGISTER_HISTORY_DAILY, 2, 4)  # c330C[0-1]: Registers 0x330C-0x330D
 
             # REGISTER_BOOST_VOLTAGE (0x9002): Battery charging parameters
@@ -459,16 +459,11 @@ class DbusEpever(object):
             self._dbusservice['/Yield/User'] = (c3300[12] | c3300[13] << 8)/100
             self._dbusservice['/Yield/System'] = (c3300[12] | c3300[13] << 8)/100
             
-            # Registers 0x330C-0x330D: Daily generated energy (kWh), divide by 100
-            # Used as today's yield value
+            # Registers 0x330C-0x330D: Generated energy today (kWh × 100), cleared by the
+            # controller at midnight.  Write only to today's slot; yesterday's yield is
+            # maintained by the midnight rollover block above which snapshots Daily/0/Yield
+            # before resetting it — the EPEVER has no separate "yesterday" energy register.
             self._dbusservice['/History/Daily/0/Yield'] = (c330C[0] | c330C[1] << 8)/100
-            
-            # Update yesterday's yield from EPEVER registers
-            # Registers at REGISTER_HISTORY_PREV_DAY (0x330C): Previous day's energy
-            # c330C[0-1] contains yesterday's generated energy
-            yesterday_yield = (c330C[0] | c330C[1] << 8)/100
-            if yesterday_yield > 0:
-                self._dbusservice['/History/Daily/1/Yield'] = yesterday_yield
 
             # Update historical max/min statistics (overall and daily)
             # These track the highest/lowest values ever seen for persistent statistics
