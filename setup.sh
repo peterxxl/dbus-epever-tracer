@@ -17,6 +17,11 @@
 
 DRIVER_DIR=/data/dbus-epever-tracer
 
+# --- Python dependencies ------------------------------------------------------
+# pip packages are installed on the root filesystem and wiped on every OS
+# update. Reinstall minimalmodbus unconditionally so it is always present.
+pip3 install -q minimalmodbus
+
 # --- Symlinks -----------------------------------------------------------------
 # /opt/victronenergy is on the read-only root filesystem and is wiped on every
 # OS update.  Recreate the symlinks the Venus OS service infrastructure needs.
