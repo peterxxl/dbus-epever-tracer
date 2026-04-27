@@ -36,9 +36,16 @@ and the official EPEVER Tracer Modbus documentation.
 # ===============================
 # Required libraries
 # ===============================
-import minimalmodbus
 import sys
 import os
+
+# Resolve symlinks so that relative paths work when the driver is run from
+# /opt/victronenergy/dbus-epever-tracer/ (a symlink into /data/).
+_DRIVER_DIR = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(1, os.path.join(_DRIVER_DIR, '../ext/velib_python'))
+sys.path.insert(1, os.path.join(_DRIVER_DIR, '../ext'))  # bundled minimalmodbus
+
+import minimalmodbus
 import json
 import logging
 import traceback
@@ -49,12 +56,6 @@ from gi.repository import GLib  # For main event loop
 import dbus
 import dbus.service  # For DBus service implementation
 import serial  # For serial port handling
-
-# ===============================
-# Local library path setup
-# ===============================
-sys.path.insert(1, os.path.join(os.path.dirname(__file__), '../ext/velib_python'))
-sys.path.insert(1, os.path.join(os.path.dirname(__file__), '../ext'))  # bundled minimalmodbus
 
 # ===============================
 # Local application imports
