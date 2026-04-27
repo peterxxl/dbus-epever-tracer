@@ -53,7 +53,17 @@ bash /data/dbus-epever-tracer/setup.sh
 echo "      Done."
 
 echo ""
+echo "[+] Restarting driver..."
+SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -1)
+if [ -n "$SVC" ]; then
+    svc -t /service/"$SVC"
+    echo "      Restarted: $SVC"
+else
+    echo "      No running service found — driver will start automatically when RS485 adapter is detected."
+fi
+
+echo ""
 echo "================================================="
-echo "  Update complete. Please reboot to finish."
+echo "  Update complete."
 echo "================================================="
 echo ""

@@ -59,7 +59,18 @@ bash /data/dbus-epever-tracer/setup.sh
 echo "      Done."
 
 echo ""
+echo "[+] Starting driver..."
+svc -t /service/serial-starter
+sleep 3
+SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -1)
+if [ -n "$SVC" ]; then
+    echo "      Driver started: $SVC"
+else
+    echo "      RS485 adapter not detected yet — plug it in and the driver will start automatically."
+fi
+
+echo ""
 echo "================================================="
-echo "  Installation complete. Please reboot to finish."
+echo "  Installation complete."
 echo "================================================="
 echo ""
