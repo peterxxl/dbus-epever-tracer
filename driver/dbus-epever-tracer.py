@@ -193,17 +193,9 @@ logging.info(f"{__file__} is starting up, use -h argument to see optional argume
 # ===============================
 
 class DbusEpever(object):
-    def __init__(self, paths):
-        """Create and register the DBus service.
-
-        Parameters
-        ----------
-        paths : dict
-            Dictionary of DBus paths.  It is kept for compatibility with
-            other drivers but is currently unused.
-        """
+    def __init__(self):
+        """Create and register the DBus service."""
         self._dbusservice = VeDbusService(servicename)
-        self._paths = paths
         
         # Variables for tracking charge state times
         self._last_update_time = time.time()
@@ -516,7 +508,7 @@ def main():
     DBusGMainLoop(set_as_default=True)
 
     # Create the EPEVER DBus service instance
-    epever = DbusEpever(paths = None)
+    epever = DbusEpever()
 
     logging.info('Connected to dbus, and switching over to GLib.MainLoop() (event based)')
     # Start the GLib event loop (runs forever)
