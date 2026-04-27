@@ -437,14 +437,14 @@ class DbusEpever(object):
             
             # Registers 0x3312-0x3313: Total generated energy (kWh), divide by 100
             # Combine two 16-bit registers into one 32-bit value
-            self._dbusservice['/Yield/User'] = (c3300[12] | c3300[13] << 8)/100
-            self._dbusservice['/Yield/System'] = (c3300[12] | c3300[13] << 8)/100
+            self._dbusservice['/Yield/User'] = (c3300[12] | c3300[13] << 16)/100
+            self._dbusservice['/Yield/System'] = (c3300[12] | c3300[13] << 16)/100
             
             # Registers 0x330C-0x330D: Generated energy today (kWh × 100), cleared by the
             # controller at midnight.  Write only to today's slot; yesterday's yield is
             # maintained by the midnight rollover block above which snapshots Daily/0/Yield
             # before resetting it — the EPEVER has no separate "yesterday" energy register.
-            self._dbusservice['/History/Daily/0/Yield'] = (c330C[0] | c330C[1] << 8)/100
+            self._dbusservice['/History/Daily/0/Yield'] = (c330C[0] | c330C[1] << 16)/100
 
             # Update historical max/min statistics (overall and daily)
             # These track the highest/lowest values ever seen for persistent statistics
