@@ -73,7 +73,6 @@ firmwareversion = 'v1.04'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
-exceptionCounter = 0
 # State mapping for EPEVER to Victron charger states:
 # Indexes: [00 01 10 11] where bits are [discharge, charge]
 # 00 = No charging, 01 = Float, 10 = Boost, 11 = Equalizing
@@ -196,7 +195,8 @@ class DbusEpever(object):
     def __init__(self):
         """Create and register the DBus service."""
         self._dbusservice = VeDbusService(servicename)
-        
+        self._exception_counter = 0
+
         # Variables for tracking charge state times
         self._last_update_time = time.time()
         self._current_charge_state = 0  # 0=Off, 3=Bulk, 4=Absorption, 5=Float, 7=Equalize
@@ -300,7 +300,6 @@ class DbusEpever(object):
         errors the driver exits so that the supervisor can restart it.
         """
 
-        global exceptionCounter
         try:
             # Read main data registers from EPEVER (see protocol docs for meaning)
             # REGISTER_PV_BATTERY (0x3100): PV array data registers (18 registers)
@@ -331,13 +330,13 @@ class DbusEpever(object):
         except Exception as e:
             # On communication error, increment error counter and exit after 3 failures
             logging.exception("Exception occurred during Modbus read: %s", e)
-            exceptionCounter += 1
-            if exceptionCounter >= 3:
+            self._exception_counter += 1
+            if self._exception_counter >= 3:
                 logging.critical("Too many Modbus failures, exiting.")
                 sys.exit(1)
             return True
         else:
-            exceptionCounter = 0  # Reset on success
+            self._exception_counter = 0  # Reset on success
             # Prevent divide by zero for PV voltage (min 0.01 so PV current can be calculated)
             if c3100[0] < 1:
                 c3100[0] = 1
