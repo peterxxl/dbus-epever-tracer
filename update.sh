@@ -11,22 +11,22 @@ read -p "Update Epever Tracer on Venus OS at your own risk? [Y to proceed]" -n 1
 echo    # move to a new line
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    echo "\n[1/6] Switching to /data directory..."
+    echo "[1/5] Switching to /data directory..."
     cd /data
 
-    echo "[2/6] Downloading latest dbus-epever-tracer driver..."
+    echo "[2/5] Downloading latest dbus-epever-tracer driver..."
     wget -q --show-progress https://github.com/peterxxl/dbus-epever-tracer/archive/master.zip
     echo "Unzipping driver..."
     unzip -q master.zip
     rm master.zip
 
-    echo "[3/6] Downloading latest Victron velib_python library..."
+    echo "[3/5] Downloading latest Victron velib_python library..."
     wget -q --show-progress https://github.com/victronenergy/velib_python/archive/master.zip
     echo "Unzipping library..."
     unzip -q master.zip
     rm master.zip
 
-    echo "[4/6] Installing libraries and organizing folders..."
+    echo "[4/5] Installing libraries and organizing folders..."
     mkdir -p dbus-epever-tracer/ext/velib_python
     cp -R dbus-epever-tracer-master/* dbus-epever-tracer
     cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
@@ -35,17 +35,26 @@ then
     rm -r velib_python-master
     rm -r dbus-epever-tracer-master
 
-    echo "[5/6] Setting execute permissions on driver and service scripts..."
+    echo "[5/5] Setting permissions and re-applying OS configuration..."
+    chmod +x /data/dbus-epever-tracer/setup.sh
     chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
     chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
     chmod +x /data/dbus-epever-tracer/service/run
     chmod +x /data/dbus-epever-tracer/service/log/run
 
-    echo "[6/6] Creating/Updating symlinks for Victron Energy integration..."
-    ln -sf /data/dbus-epever-tracer/driver /opt/victronenergy/dbus-epever-tracer
-    ln -sf /data/dbus-epever-tracer/service /opt/victronenergy/service-templates/dbus-epever-tracer
+    # Re-run setup.sh to ensure symlinks, serial-starter entry, and udev rule
+    # are in place (they may have been wiped by a recent OS update).
+    bash /data/dbus-epever-tracer/setup.sh
 
-    echo "\nUpdate complete! To finish, please reboot your Venus OS device."
+    # Ensure /data/rc.local calls setup.sh on every boot so future OS updates
+    # do not require manual intervention.
+    if ! grep -q "dbus-epever-tracer/setup.sh" /data/rc.local 2>/dev/null; then
+        echo "bash /data/dbus-epever-tracer/setup.sh" >> /data/rc.local
+        chmod +x /data/rc.local
+        echo "Registered setup.sh in /data/rc.local for post-update auto-recovery."
+    fi
+
+    echo "Update complete! To finish, please reboot your Venus OS device."
 else
-    echo "\nUpdate cancelled by user. No changes were made."
+    echo "Update cancelled by user. No changes were made."
 fi

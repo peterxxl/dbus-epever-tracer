@@ -12,7 +12,7 @@ read -p "Install Epever Tracer on Venus OS at your own risk? [Y to proceed]" -n 
 echo    # Move to a new line for readability
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    echo "\n[1/6] Installing Python3 pip and minimalmodbus library..."
+    echo "[1/6] Installing Python3 pip and minimalmodbus library..."
     # Update opkg package list
     opkg update
     # Install Python3 pip
@@ -39,31 +39,33 @@ then
     cp -R dbus-epever-tracer-master/* dbus-epever-tracer
     cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
 
-    echo "[5/6] Cleaning up temporary files and adding service entries..."
-    # Remove temporary files
+    echo "[5/6] Cleaning up temporary files..."
     rm -r velib_python-master
     rm -r dbus-epever-tracer-master
-    # Add dbus-epever-tracer service entry to serial-starter.conf
-    cd ..
-    sed -i '/service.*imt.*dbus-imt-si-rs485tc/a service epever		dbus-epever-tracer' /etc/venus/serial-starter.conf
-    # Add udev rule for Victron Energy USB RS485 cable (FT232R chipset)
-    sed -i '$a\n\n# Epever Tracer: auto-start service for Victron Energy USB RS485 cable (FT232R chipset)\nACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="FT232R_USB_UART",            ENV{VE_SERVICE}="epever"' /etc/udev/rules.d/serial-starter.rules
 
-    # Step 5: Make driver and service scripts executable
     echo "[6/6] Finalizing installation..."
+    # Make driver and service scripts executable
+    chmod +x /data/dbus-epever-tracer/setup.sh
     chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
     chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
     chmod +x /data/dbus-epever-tracer/service/run
     chmod +x /data/dbus-epever-tracer/service/log/run
 
-    # Create symbolic links for driver and service templates
-    ln -s /data/dbus-epever-tracer/driver /opt/victronenergy/dbus-epever-tracer
-    ln -s /data/dbus-epever-tracer/service /opt/victronenergy/service-templates/dbus-epever-tracer
+    # Run setup.sh to create symlinks, serial-starter entry, and udev rule
+    bash /data/dbus-epever-tracer/setup.sh
+
+    # Register setup.sh in /data/rc.local so it runs automatically after every
+    # Venus OS update, recreating the symlinks and config that the update wiped.
+    if ! grep -q "dbus-epever-tracer/setup.sh" /data/rc.local 2>/dev/null; then
+        echo "bash /data/dbus-epever-tracer/setup.sh" >> /data/rc.local
+        chmod +x /data/rc.local
+        echo "Registered setup.sh in /data/rc.local for post-update auto-recovery."
+    fi
 
     echo "[6/6] Installation complete!"
-	
-	# Final step: Prompt user to reboot
+
+    # Final step: Prompt user to reboot
     echo "To finish, reboot the Venus OS device"
 else
-    echo "\nInstallation cancelled by user. No changes were made."
+    echo "Installation cancelled by user. No changes were made."
 fi
