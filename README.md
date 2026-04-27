@@ -11,7 +11,7 @@ Bridges an EPEVER Tracer controller to Victron's Venus OS ecosystem over Modbus 
 | Component | Version / Model |
 |---|---|
 | Venus OS device | Victron Cerbo-S GX |
-| Venus OS | v3.60 |
+| Venus OS | v3.60, v3.72 |
 | Solar charge controller | EPEVER Tracer 3210A MPPT |
 | RS-485 adapter | Victron Energy USB RS485 cable (FT232R chipset) |
 
@@ -88,7 +88,7 @@ Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Fl
 
 ## Software requirements
 
-- Venus OS v3.60 or later
+- Venus OS v3.60 or later (tested up to v3.72)
 - Root SSH access to the Venus OS device
 - Internet access from the device during installation
 
@@ -111,8 +111,7 @@ Answer `Y` at the prompt. The script will:
 4. Add an `epever` entry to `/etc/venus/serial-starter.conf`.
 5. Add a udev rule for the FT232R USB adapter to `/etc/udev/rules.d/serial-starter.rules`.
 6. Create symlinks under `/opt/victronenergy/` so Venus OS finds the service.
-
-After the script finishes, **reboot** the device. Venus OS will detect the RS-485 adapter on next boot and start the driver automatically.
+7. Restart `serial-starter` so the driver starts immediately without a reboot.
 
 ---
 
@@ -124,7 +123,7 @@ chmod +x update.sh
 ./update.sh
 ```
 
-The update script follows the same steps as the installer but uses `ln -sf` so existing symlinks are replaced safely.
+The update script follows the same steps as the installer but uses `ln -sf` so existing symlinks are replaced safely. It automatically restarts the running driver service when done — no reboot needed.
 
 ---
 
