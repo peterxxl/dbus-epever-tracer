@@ -38,3 +38,12 @@ if ! grep -q 'VE_SERVICE="epever"' "$UDEV_RULES" 2>/dev/null; then
     printf '\n\n# Epever Tracer: auto-start service for Victron Energy USB RS485 cable (FT232R chipset)\nACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="FT232R_USB_UART", ENV{VE_SERVICE}="epever"\n' >> "$UDEV_RULES"
     udevadm control --reload-rules 2>/dev/null || true
 fi
+
+# --- boot hook ----------------------------------------------------------------
+# Ensure /data/rc.local exists, contains our setup call, and is executable.
+# Venus OS (custom-rc-late.sh) only executes rc.local if the -x bit is set.
+RC_LOCAL=/data/rc.local
+if ! grep -q "dbus-epever-tracer/setup.sh" "$RC_LOCAL" 2>/dev/null; then
+    echo "bash $DRIVER_DIR/setup.sh" >> "$RC_LOCAL"
+fi
+chmod +x "$RC_LOCAL"

@@ -48,16 +48,8 @@ chmod +x /data/dbus-epever-tracer/service/log/run
 echo "      Done."
 
 echo ""
-echo "[5/5] Applying OS configuration (symlinks, serial-starter, udev)..."
+echo "[5/5] Applying OS configuration (symlinks, serial-starter, udev, boot hook)..."
 bash /data/dbus-epever-tracer/setup.sh
-
-if ! grep -q "dbus-epever-tracer/setup.sh" /data/rc.local 2>/dev/null; then
-    echo "bash /data/dbus-epever-tracer/setup.sh" >> /data/rc.local
-    chmod +x /data/rc.local
-    echo "      Boot hook registered in /data/rc.local."
-else
-    echo "      Boot hook already registered."
-fi
 echo "      Done."
 
 echo ""
