@@ -40,10 +40,15 @@ if ! grep -q 'VE_SERVICE="epever"' "$UDEV_RULES" 2>/dev/null; then
 fi
 
 # --- boot hook ----------------------------------------------------------------
-# Ensure /data/rc.local exists, contains our setup call, and is executable.
-# Venus OS (custom-rc-late.sh) only executes rc.local if the -x bit is set.
-RC_LOCAL=/data/rc.local
-if ! grep -q "dbus-epever-tracer/setup.sh" "$RC_LOCAL" 2>/dev/null; then
-    echo "bash $DRIVER_DIR/setup.sh" >> "$RC_LOCAL"
+# Register this script in /data/rcS.local so it runs at every boot during
+# early system initialisation — before serial-starter starts.
+# Venus OS executes /data/rcS.local via /etc/rcS.d/S99custom-rc-early.sh
+# only if the file has the executable bit set.
+#
+# Note: /data/rc.local is a late hook (after services start) and is too late
+# for serial-starter to pick up the driver — use rcS.local instead.
+RCS_LOCAL=/data/rcS.local
+if ! grep -q "dbus-epever-tracer/setup.sh" "$RCS_LOCAL" 2>/dev/null; then
+    echo "bash $DRIVER_DIR/setup.sh" >> "$RCS_LOCAL"
 fi
-chmod +x "$RC_LOCAL"
+chmod +x "$RCS_LOCAL"
