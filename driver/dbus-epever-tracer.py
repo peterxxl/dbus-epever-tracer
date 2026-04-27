@@ -272,7 +272,7 @@ class DbusEpever(object):
 
         # Historical statistics (overall and daily)
         self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)        # Max PV voltage seen
-        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 0, gettextcallback=_v)   # Min battery voltage seen
+        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 999, gettextcallback=_v) # Min battery voltage seen (999 = unseen sentinel)
         self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 0, gettextcallback=_v)   # Max battery voltage seen
         self._dbusservice.add_path('/History/Overall/DaysAvailable', 2)                           # Number of days data available
         self._dbusservice.add_path('/History/Overall/LastError1', 0) 
@@ -281,7 +281,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/History/Daily/0/Yield', 0.0)                                 # Today's yield (kWh)
         self._dbusservice.add_path('/History/Daily/0/MaxPower',0)                                 # Max power today (W)
         self._dbusservice.add_path('/History/Daily/0/MaxPvVoltage', 0)                            # Max PV voltage today (V)
-        self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 0)                     # Min battery voltage today (V)
+        self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 999)                    # Min battery voltage today (V) (999 = unseen sentinel)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryVoltage', 0)                       # Max battery voltage today (V)
         self._dbusservice.add_path('/History/Daily/0/MaxBatteryCurrent', 0)                       # Max battery current today (A)
         self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0)                              # Time in bulk charge phase (min)
@@ -435,7 +435,7 @@ class DbusEpever(object):
                 self._time_in_float = 0.0
                 self._dbusservice['/History/Daily/0/MaxPower'] = 0
                 self._dbusservice['/History/Daily/0/MaxPvVoltage'] = 0
-                self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = 0
+                self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = 999  # reset sentinel so first reading wins
                 self._dbusservice['/History/Daily/0/MaxBatteryVoltage'] = 0
                 self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = 0
                 
