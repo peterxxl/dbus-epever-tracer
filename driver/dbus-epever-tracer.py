@@ -147,6 +147,31 @@ def map_epever_error(batt_status, chg_status):
     # No error conditions detected
     return 0
 
+# Victron warning codes used below:
+#   6  = Battery low temperature
+#   20 = Low state of charge (used for under-voltage / low-voltage disconnect)
+WARNING_MAP = {
+    'low_soc': 20,
+    'low_temperature': 6,
+}
+
+def map_epever_warning(batt_status):
+    """Translate EPEVER battery status bits to a Victron MPPT warning code.
+
+    Only warning-level conditions are mapped here; hard faults are handled
+    by map_epever_error(). Register 0x3200 bits checked:
+      D1 (0x02) — battery under-voltage
+      D2 (0x04) — battery low-voltage disconnect
+      D5 (0x20) — battery low temperature
+    """
+    if batt_status & 0x02:  # under-voltage
+        return WARNING_MAP['low_soc']
+    if batt_status & 0x04:  # low-voltage disconnect
+        return WARNING_MAP['low_soc']
+    if batt_status & 0x20:  # low temperature
+        return WARNING_MAP['low_temperature']
+    return 0
+
 def _get_bit(num, i):
     """Return True if bit i of integer num is set."""
     return bool(num & (1 << i))
@@ -231,7 +256,8 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Yield/System', None, gettextcallback=_kwh)
         self._dbusservice.add_path('/Load/State',None, writeable=True)
         self._dbusservice.add_path('/Load/I',None, gettextcallback=_a)
-        self._dbusservice.add_path('/ErrorCode',0)
+        self._dbusservice.add_path('/ErrorCode', 0)
+        self._dbusservice.add_path('/WarningCode', 0)
 
         # Historical statistics (overall and daily)
         self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)        # Max PV voltage seen
@@ -331,6 +357,7 @@ class DbusEpever(object):
             # c3200[0] = Register 0x3200: Battery status (flags for over/under voltage, temperature, etc.)
             # c3200[1] = Register 0x3201: Charging status (flags for charging state, PV status, etc.)
             self._dbusservice['/ErrorCode'] = map_epever_error(c3200[0], c3200[1])
+            self._dbusservice['/WarningCode'] = map_epever_warning(c3200[0])
 
             # Map EPEVER charger state to Victron state for VRM compatibility
             # Victron: 0=Off, 2=Fault, 3=Bulk, 4=Absorption, 5=Float, 6=Storage, 7=Equalize
