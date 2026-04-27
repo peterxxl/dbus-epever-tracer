@@ -148,6 +148,10 @@ def map_epever_error(batt_status, chg_status):
     # No error conditions detected
     return 0
 
+def _get_bit(num, i):
+    """Return True if bit i of integer num is set."""
+    return bool(num & (1 << i))
+
 # ===============================
 # Modbus RTU initialization
 # ===============================
@@ -304,11 +308,6 @@ class DbusEpever(object):
         errors the driver exits so that the supervisor can restart it.
         """
 
-        # Helper to test individual bits in the state registers returned by the
-        # controller. ``num`` is the integer value, ``i`` the bit position.
-        def getBit(num, i):
-            return ((num & (1 << i)) != 0)
-
         global exceptionCounter
         try:
             # Read main data registers from EPEVER (see protocol docs for meaning)
@@ -371,7 +370,7 @@ class DbusEpever(object):
             # Epever:  00=No charging, 01=Float, 10=Boost, 11=Equalizing
             # Bits 2-3 of register 0x3201 (charging status) indicate the charging state
             # getBit extracts specific bits from the charging status register
-            self._dbusservice['/State'] = state[getBit(c3200[1],3)* 2 + getBit(c3200[1],2)]
+            self._dbusservice['/State'] = state[_get_bit(c3200[1], 3) * 2 + _get_bit(c3200[1], 2)]
             
             # Special case: if in Bulk and battery voltage > float set Absorption
             # boostchargingvoltage[1] = Register 0x9001: Float charging voltage (x100 V)
