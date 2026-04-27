@@ -1,3 +1,10 @@
 #!/bin/sh
+# Logging run script for the daemontools/runit log service.
+# Captures stdout from the main service run script and writes it to rotating log files.
 exec 2>&1
+# multilog flags:
+#   t        — prefix each line with a TAI64N timestamp
+#   s25000   — rotate each log file at 25 000 bytes
+#   n4       — keep at most 4 rotated log files (~100 KB total)
+# "TTY" in the path is replaced by serial-starter with the real port name (e.g. ttyUSB0).
 exec multilog t s25000 n4 /var/log/dbus-epever-tracer.TTY

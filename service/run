@@ -1,3 +1,7 @@
 #!/bin/sh
+# Service run script executed by the Venus OS process supervisor (daemontools/runit).
+# Redirects stderr to stdout so both streams are captured by the log service below.
 exec 2>&1
+# "TTY" is a literal placeholder that serial-starter replaces at runtime with the
+# actual serial device name (e.g. ttyUSB0) when it launches this service.
 exec /opt/victronenergy/dbus-epever-tracer/start-dbus-epever-tracer.sh TTY
