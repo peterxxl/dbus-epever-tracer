@@ -42,17 +42,8 @@ import os
 import logging
 import traceback
 import time
-import math
 import datetime
 from datetime import datetime, date
-from asyncio import exceptions
-import gettext
-import time
-
-# ===============================
-# Standard library imports
-# ===============================
-import argparse
 from gi.repository import GLib  # For main event loop
 import dbus
 import dbus.service  # For DBus service implementation
