@@ -18,8 +18,7 @@ fi
 echo ""
 echo "[1/6] Installing Python dependencies..."
 opkg update
-opkg install python3-pip
-pip3 install -U minimalmodbus
+opkg install python3-pip python3-serial
 echo "      Done."
 
 echo ""

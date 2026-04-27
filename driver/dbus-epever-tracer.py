@@ -54,6 +54,7 @@ import serial  # For serial port handling
 # Local library path setup
 # ===============================
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), '../ext/velib_python'))
+sys.path.insert(1, os.path.join(os.path.dirname(__file__), '../ext'))  # bundled minimalmodbus
 
 # ===============================
 # Local application imports
