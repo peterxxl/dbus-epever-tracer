@@ -151,21 +151,7 @@ def _get_bit(num, i):
     """Return True if bit i of integer num is set."""
     return bool(num & (1 << i))
 
-# ===============================
-# Modbus RTU initialization
-# ===============================
-# The driver expects the serial port as a command-line argument.
-# Example: python3 dbus-epever-tracer.py /dev/ttyUSB0
-if len(sys.argv) > 1:
-    controller = minimalmodbus.Instrument(sys.argv[1], 1)  # Modbus slave address 1
-    # Generate a unique DBus service name based on the serial port
-    servicename = 'com.victronenergy.solarcharger.' + sys.argv[1].split('/')[-1]
-else:
-    print("Error: No serial port specified. Usage: python3 dbus-epever-tracer.py /dev/ttyUSB0")
-    sys.exit()
-
-# Configure Modbus RTU connection parameters for EPEVER Tracer
-# Modbus register addresses
+# Modbus register addresses (constants — safe at module level)
 REGISTER_PV_BATTERY = 0x3100  # PV array voltage, current, power, etc.
 REGISTER_CHARGER_STATE = 0x3200  # Charging status, charging stage, etc.
 REGISTER_HISTORY = 0x3300  # Historical generated energy data
@@ -173,19 +159,9 @@ REGISTER_HISTORY_DAILY = 0x330C  # Daily historical generated energy data
 REGISTER_PARAMETERS = 0x9000  # Charging and load parameters
 REGISTER_BOOST_VOLTAGE = 0x9002  # Boost voltage setpoint
 
-# Only instantiate controller once, using the provided port
-controller.serial.baudrate = 115200    # Standard baud rate for EPEVER
-controller.serial.bytesize = 8         # 8 data bits
-controller.serial.parity = serial.PARITY_NONE  # No parity
-controller.serial.stopbits = 1         # 1 stop bit
-controller.serial.timeout = 0.2        # 200 ms timeout
-controller.mode = minimalmodbus.MODE_RTU  # Use RTU (binary) mode
-controller.clear_buffers_before_each_transaction = True  # Prevents stale data
-
-
-
-# Print startup message for debugging
-logging.info(f"{__file__} is starting up, use -h argument to see optional arguments")
+# controller and servicename are initialised in main() once the serial port
+# is known and validated; declared here so the module-level scope is explicit.
+controller = None
 
 # ===============================
 # Main DBus Service Class
@@ -501,6 +477,32 @@ def main():
     """
 
     logging.basicConfig(level=logging.DEBUG)
+    logging.info(f"{__file__} is starting up")
+
+    # Validate and open the serial port passed as the first CLI argument.
+    if len(sys.argv) < 2:
+        logging.critical("Usage: dbus-epever-tracer.py /dev/ttyUSBx")
+        sys.exit(1)
+
+    port = sys.argv[1]
+    global controller, servicename
+    try:
+        controller = minimalmodbus.Instrument(port, 1)  # Modbus slave address 1
+    except Exception as e:
+        logging.critical("Cannot open serial port %s: %s", port, e)
+        sys.exit(1)
+
+    # Configure Modbus RTU connection parameters for EPEVER Tracer
+    controller.serial.baudrate = 115200    # Standard baud rate for EPEVER
+    controller.serial.bytesize = 8         # 8 data bits
+    controller.serial.parity = serial.PARITY_NONE  # No parity
+    controller.serial.stopbits = 1         # 1 stop bit
+    controller.serial.timeout = 0.2        # 200 ms timeout
+    controller.mode = minimalmodbus.MODE_RTU  # Use RTU (binary) mode
+    controller.clear_buffers_before_each_transaction = True  # Prevents stale data
+
+    # Build the DBus service name from the port's basename (e.g. ttyUSB0)
+    servicename = 'com.victronenergy.solarcharger.' + port.split('/')[-1]
 
     from dbus.mainloop.glib import DBusGMainLoop
     # Set up the main loop so we can send/receive async calls to/from DBus
