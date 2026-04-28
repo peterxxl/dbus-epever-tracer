@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-2323'
+firmwareversion = 'v2026.04.28-2318'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -253,10 +253,6 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Dc/0/Voltage', None, gettextcallback=_v)
         self._dbusservice.add_path('/Dc/0/Temperature', None, gettextcallback=_c)
         self._dbusservice.add_path('/Alarms/HighTemperature', 0)
-        self._dbusservice.add_path('/Alarms/HighInternalTemperature', 0)
-        self._dbusservice.add_path('/Alarms/LowVoltage', 0)
-        self._dbusservice.add_path('/Alarms/HighVoltage', 0)
-        self._dbusservice.add_path('/Alarms/LowSoc', 0)
 
         self._dbusservice.add_path('/State',None)
         self._dbusservice.add_path('/Pv/V', None, gettextcallback=_v)
