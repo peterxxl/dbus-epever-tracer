@@ -153,7 +153,6 @@ Open `driver/dbus-epever-tracer.py` and edit the constants near the top of the f
 - Read the service log: `cat /var/log/dbus-epever-tracer.ttyUSB0/current`
 
 **Driver fails to start**
-- Verify `minimalmodbus` is installed: `python3 -c "import minimalmodbus"`
 - Check that the udev rule fired: `udevadm info /dev/ttyUSB0 | grep VE_SERVICE`
 
 **Wrong serial port**
