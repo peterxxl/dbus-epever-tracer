@@ -66,13 +66,11 @@ from vedbus import VeDbusService  # Victron's DBus service implementation
 # Global configuration variables
 # ===============================
 # These variables define the driver version, device identity, and service settings.
-softwareversion = 'v2026.04.28-1015'
 serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-customname = 'Cargador FV'
-firmwareversion = 'v1.04'
+firmwareversion = 'v2026.04.28-1027'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -239,7 +237,6 @@ class DbusEpever(object):
 
         # Create the management objects (required by Victron DBus API)
         self._dbusservice.add_path('/Mgmt/ProcessName', __file__)
-        self._dbusservice.add_path('/Mgmt/ProcessVersion', softwareversion)
         self._dbusservice.add_path('/Mgmt/Connection', connection)
 
         # Create the mandatory device identification and status objects
@@ -249,7 +246,6 @@ class DbusEpever(object):
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
         self._dbusservice.add_path('/Connected', 1)
         self._dbusservice.add_path('/Serial', serialnumber)
-        self._dbusservice.add_path('/Devices/0/CustomName', customname, writeable=True)
 
         # Network and BMS status (optional, for completeness)
         self._dbusservice.add_path('/Link/NetworkMode', 0)      # 0 = Standalone

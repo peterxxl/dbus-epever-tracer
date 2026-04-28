@@ -4,5 +4,5 @@
 VERSION="v$(date '+%Y.%m.%d-%H%M')"
 FILE="driver/dbus-epever-tracer.py"
 
-sed -i.bak "s/^softwareversion = .*/softwareversion = '$VERSION'/" "$FILE" && rm -f "${FILE}.bak"
+sed -i.bak "s/^firmwareversion = .*/firmwareversion = '$VERSION'/" "$FILE" && rm -f "${FILE}.bak"
 git add "$FILE"
