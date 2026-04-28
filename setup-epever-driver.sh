@@ -130,23 +130,40 @@ do_remove() {
     echo ""
 }
 
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+# Download a zip from $1 and extract it; exits the script on failure.
+download_and_extract() {
+    local url=$1
+    local label=$2
+    rm -f master.zip
+    if ! wget -q --show-progress "$url" -O master.zip; then
+        echo "      ERROR: download failed ($label)."
+        rm -f master.zip
+        exit 1
+    fi
+    if ! unzip -q master.zip; then
+        echo "      ERROR: failed to extract archive ($label)."
+        rm -f master.zip
+        exit 1
+    fi
+    rm master.zip
+}
+
 # ─── Install / Update ─────────────────────────────────────────────────────────
 
 do_install_update() {
+    cd /data
+
     if [ "$ACTION" = install ]; then
         echo ""
         echo "[1/5] Downloading driver..."
-        cd /data
-        wget -q --show-progress "$GITHUB_DRIVER" -O master.zip
-        unzip -q master.zip
-        rm master.zip
+        download_and_extract "$GITHUB_DRIVER" "driver"
         echo "      Done."
 
         echo ""
         echo "[2/5] Downloading Victron velib_python library..."
-        wget -q --show-progress "$GITHUB_VELIB" -O master.zip
-        unzip -q master.zip
-        rm master.zip
+        download_and_extract "$GITHUB_VELIB" "velib_python"
         echo "      Done."
 
         echo ""
@@ -191,17 +208,12 @@ do_install_update() {
 
         echo ""
         echo "[1/5] Downloading driver..."
-        cd /data
-        wget -q --show-progress "$GITHUB_DRIVER" -O master.zip
-        unzip -q master.zip
-        rm master.zip
+        download_and_extract "$GITHUB_DRIVER" "driver"
         echo "      Done."
 
         echo ""
         echo "[2/5] Downloading Victron velib_python library..."
-        wget -q --show-progress "$GITHUB_VELIB" -O master.zip
-        unzip -q master.zip
-        rm master.zip
+        download_and_extract "$GITHUB_VELIB" "velib_python"
         echo "      Done."
 
         echo ""
