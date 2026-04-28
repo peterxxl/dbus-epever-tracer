@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-1041'
+firmwareversion = 'v2026.04.28-1549'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -243,6 +243,7 @@ class DbusEpever(object):
         self._dbusservice.add_path('/DeviceInstance', deviceinstance)
         self._dbusservice.add_path('/ProductId', productid)
         self._dbusservice.add_path('/ProductName', productname)
+        self._dbusservice.add_path('/CustomName', productname)
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
         self._dbusservice.add_path('/Connected', 1)
         self._dbusservice.add_path('/Serial', serialnumber)

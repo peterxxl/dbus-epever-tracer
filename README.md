@@ -137,11 +137,9 @@ Open `driver/dbus-epever-tracer.py` and edit the constants near the top of the f
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `softwareversion` | `'0.9'` | Reported driver version |
 | `serialnumber` | `'WO20160415-008-0056'` | Device serial shown in VRM |
 | `productname` | `'Epever Tracer MPPT'` | Product name shown in VRM |
-| `customname` | `'Cargador FV'` | Friendly display name |
-| `firmwareversion` | `'v1.04'` | Controller firmware version |
+| `firmwareversion` | _(auto-stamped)_ | Set to `vYYYY.MM.DD-HHMM` by the pre-commit hook on every commit |
 | `deviceinstance` | `278` | VRM device instance number |
 
 ---
@@ -167,6 +165,52 @@ svc -t /service/dbus-epever-tracer.ttyUSB0
 
 ---
 
+## Live Monitor
+
+`tools/epever-monitor.py` is a standalone diagnostic tool that reads every available Modbus register block and displays them in a colour-coded terminal UI. Use it to verify readings, debug communication issues, or capture raw Modbus frames for analysis.
+
+**The driver and the monitor cannot share the serial port.** Stop the driver before running the monitor:
+
+```sh
+svc -d /service/dbus-epever-tracer.ttyUSB0
+```
+
+Run the monitor:
+
+```sh
+python3 /data/dbus-epever-tracer/tools/epever-monitor.py [port] [slave] [interval] [--dump]
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `port` | `/dev/ttyUSB0` | Serial device |
+| `slave` | `1` | Modbus slave address |
+| `interval` | `2.0` | Refresh interval in seconds |
+| `--dump` | off | Capture one iteration of raw Modbus bytes to `epever-dump-TIMESTAMP.txt` alongside stdout, then exit |
+
+Examples:
+
+```sh
+# Live display on the default port, 2-second refresh
+python3 /data/dbus-epever-tracer/tools/epever-monitor.py
+
+# Explicit port, slave address, and 5-second refresh
+python3 /data/dbus-epever-tracer/tools/epever-monitor.py /dev/ttyUSB1 1 5
+
+# Capture raw Modbus frames to a file for off-device analysis
+python3 /data/dbus-epever-tracer/tools/epever-monitor.py /dev/ttyUSB0 1 2 --dump
+```
+
+The display shows: PV voltage / current / power, battery voltage / current / charging power, load current and state, charging state, battery SOC and temperature, controller temperature, today's and yesterday's statistics (generated energy, max/min voltages, max power), lifetime totals, charging parameters, and the controller's real-time clock.
+
+Resume the driver when done:
+
+```sh
+svc -u /service/dbus-epever-tracer.ttyUSB0
+```
+
+---
+
 ## File structure
 
 ```
@@ -177,6 +221,8 @@ dbus-epever-tracer/
 ├── service/
 │   ├── run                          Daemontools service run script
 │   └── log/run                      Daemontools log run script
+├── tools/
+│   └── epever-monitor.py            Live terminal monitor / raw dump tool
 ├── epsolar_modbus_protocol_map.md   EPEVER register reference
 ├── setup-epever-driver.sh           Install / update / remove
 ├── setup.sh                         Post-update OS config (boot hooks, symlinks, udev)
