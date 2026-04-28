@@ -140,32 +140,39 @@ def main():
 
     signal.signal(signal.SIGINT, lambda *_: (print(f"\n{RS}Bye.\n"), sys.exit(0)))
 
+    def safe_read(addr, count, fn_code, label):
+        """Read registers, flushing the serial buffer on error so subsequent
+        reads are not corrupted by a leftover exception response."""
+        try:
+            result = instrument.read_registers(addr, count, fn_code)
+            time.sleep(0.05)
+            return result
+        except Exception as exc:
+            instrument.serial.reset_input_buffer()
+            time.sleep(0.1)
+            return None, str(exc)
+
     errors = 0
     while True:
-        try:
-            # ── Read all register blocks ─────────────────────────────────────
-            # 0x3100–0x3117 : real-time PV / battery / load / temperatures
-            rt   = instrument.read_registers(0x3100, 24, 4)
-            # 0x3200–0x3202 : status flags + load relay
-            st   = instrument.read_registers(0x3200, 3, 4)
-            # 0x3300–0x3313 : today's and historical statistics
-            hist = instrument.read_registers(0x3300, 20, 4)
-            # 0x311A        : battery state-of-charge (%)
-            soc_reg = instrument.read_registers(0x311A, 1, 4)
-            # 0x9000–0x900E : battery & charging parameters (holding regs)
-            params = instrument.read_registers(0x9000, 15, 3)
-            # 0x9013–0x9015 : equalize / boost / float duration (minutes)
-            timings = instrument.read_registers(0x9013, 3, 3)
+        # ── Read all register blocks (each isolated so one failure ────────────
+        # ── doesn't corrupt the serial buffer for the remaining reads) ─────────
+        rt      = safe_read(0x3100, 24, 4, 'real-time')
+        st      = safe_read(0x3200,  3, 4, 'status')
+        hist    = safe_read(0x3300, 20, 4, 'history')
+        soc_raw = safe_read(0x311A,  1, 4, 'SOC')      # may not exist on all models
+        params  = safe_read(0x9000, 15, 3, 'params')
+        timings = safe_read(0x9013,  3, 3, 'timings')
 
-            errors = 0
-
-        except Exception as exc:
+        # Require at least the three main blocks
+        if rt is None or st is None or hist is None:
             errors += 1
             clear_screen()
-            print(f"\n  {R}{BD}Read error (attempt {errors}): {exc}{RS}")
+            print(f"\n  {R}{BD}Cannot read core registers (attempt {errors}){RS}")
             print(f"  {DM}Retrying in 3 s…{RS}\n")
             time.sleep(3)
             continue
+
+        errors = 0
 
         # ── Parse real-time values ───────────────────────────────────────────
         pv_v   = rt[0] / 100
@@ -188,7 +195,7 @@ def main():
         # Some models expose battery temp also at offset 16 (0x3110)
         batt_temp_alt = signed(rt[16]) / 100 if len(rt) > 16 else None
 
-        soc = soc_reg[0]
+        soc = soc_raw[0] if isinstance(soc_raw, list) else None
 
         # ── Parse status ────────────────────────────────────────────────────
         batt_status = st[0]
@@ -212,26 +219,34 @@ def main():
         year_kwh          = word32(hist, 16, 17) / 100
         total_kwh         = word32(hist, 18, 19) / 100
 
-        # ── Parse parameters ────────────────────────────────────────────────
-        batt_type    = BATTERY_TYPE.get(params[0], f'Unknown ({params[0]})')
-        batt_cap_ah  = params[1]
-        temp_comp    = params[2]          # mV/°C/2V, divide by 100 for V
-        ov_disc_v    = params[3]  / 100   # over-voltage disconnect
-        chg_limit_v  = params[4]  / 100   # charging limit
-        ov_recon_v   = params[5]  / 100   # over-voltage reconnect
-        equalize_v   = params[6]  / 100
-        boost_v      = params[7]  / 100
-        float_v      = params[8]  / 100
-        boost_recon_v = params[9] / 100
-        lv_recon_v   = params[10] / 100   # low-voltage reconnect
-        uv_warn_rv   = params[11] / 100   # under-voltage warning recover
-        uv_warn_v    = params[12] / 100   # under-voltage warning
-        lv_disc_v    = params[13] / 100   # low-voltage disconnect
-        dchg_limit_v = params[14] / 100   # discharging limit
+        # ── Parse parameters (None if registers not supported) ──────────────
+        if isinstance(params, list):
+            batt_type     = BATTERY_TYPE.get(params[0], f'Unknown ({params[0]})')
+            batt_cap_ah   = params[1]
+            temp_comp     = params[2]
+            ov_disc_v     = params[3]  / 100
+            chg_limit_v   = params[4]  / 100
+            ov_recon_v    = params[5]  / 100
+            equalize_v    = params[6]  / 100
+            boost_v       = params[7]  / 100
+            float_v       = params[8]  / 100
+            boost_recon_v = params[9]  / 100
+            lv_recon_v    = params[10] / 100
+            uv_warn_rv    = params[11] / 100
+            uv_warn_v     = params[12] / 100
+            lv_disc_v     = params[13] / 100
+            dchg_limit_v  = params[14] / 100
+        else:
+            (batt_type, batt_cap_ah, temp_comp, ov_disc_v, chg_limit_v,
+             ov_recon_v, equalize_v, boost_v, float_v, boost_recon_v,
+             lv_recon_v, uv_warn_rv, uv_warn_v, lv_disc_v, dchg_limit_v) = [None] * 15
 
-        equalize_dur = timings[0]         # minutes
-        boost_dur    = timings[1]         # minutes
-        float_dur    = timings[2]         # minutes
+        if isinstance(timings, list):
+            equalize_dur = timings[0]
+            boost_dur    = timings[1]
+            float_dur    = timings[2]
+        else:
+            equalize_dur = boost_dur = float_dur = None
 
         # ── Draw ─────────────────────────────────────────────────────────────
         clear_screen()
@@ -251,8 +266,10 @@ def main():
         row('Voltage',          fmt_v(batt_v))
         row('Charging current', fmt_a(batt_a))
         row('Charging power',   fmt_w(batt_w))
-        row('State of charge',  fmt_pct(soc),
-            'register 0x311A — may read 0 if unsupported')
+        if soc is not None:
+            row('State of charge', fmt_pct(soc), 'register 0x311A')
+        else:
+            row('State of charge', f"{DM}N/A{RS}", 'register 0x311A not supported by this model')
         row('Temperature (0x310C)', fmt_c(batt_temp),
             'battery sensor')
         if batt_temp_alt is not None and batt_temp_alt != batt_temp:
@@ -300,25 +317,26 @@ def main():
         row('All time',   fmt_kwh(total_kwh))
 
         # Charging parameters
+        na = f"{DM}N/A{RS}"
         section('Charging Parameters  (holding regs 0x9000+)')
-        row('Battery type',           f"{W}{batt_type}{RS}")
-        row('Battery capacity',       f"{W}{batt_cap_ah}{RS} Ah")
-        row('Over-voltage disconnect', fmt_v(ov_disc_v))
-        row('Charging limit voltage',  fmt_v(chg_limit_v))
-        row('Equalize voltage',        fmt_v(equalize_v))
-        row('Boost voltage',           fmt_v(boost_v))
-        row('Float voltage',           fmt_v(float_v))
-        row('Boost reconnect voltage', fmt_v(boost_recon_v))
-        row('Low-voltage reconnect',   fmt_v(lv_recon_v))
-        row('Under-voltage warning',   fmt_v(uv_warn_v))
-        row('Low-voltage disconnect',  fmt_v(lv_disc_v))
-        row('Temp compensation',       f"{W}{temp_comp}{RS} mV/°C/2V")
+        row('Battery type',            f"{W}{batt_type}{RS}"          if batt_type     is not None else na)
+        row('Battery capacity',        f"{W}{batt_cap_ah}{RS} Ah"     if batt_cap_ah   is not None else na)
+        row('Over-voltage disconnect',  fmt_v(ov_disc_v)               if ov_disc_v     is not None else na)
+        row('Charging limit voltage',   fmt_v(chg_limit_v)             if chg_limit_v   is not None else na)
+        row('Equalize voltage',         fmt_v(equalize_v)              if equalize_v    is not None else na)
+        row('Boost voltage',            fmt_v(boost_v)                 if boost_v       is not None else na)
+        row('Float voltage',            fmt_v(float_v)                 if float_v       is not None else na)
+        row('Boost reconnect voltage',  fmt_v(boost_recon_v)           if boost_recon_v is not None else na)
+        row('Low-voltage reconnect',    fmt_v(lv_recon_v)              if lv_recon_v    is not None else na)
+        row('Under-voltage warning',    fmt_v(uv_warn_v)               if uv_warn_v     is not None else na)
+        row('Low-voltage disconnect',   fmt_v(lv_disc_v)               if lv_disc_v     is not None else na)
+        row('Temp compensation',        f"{W}{temp_comp}{RS} mV/°C/2V" if temp_comp     is not None else na)
 
         # Timing parameters
         section('Phase Durations  (holding regs 0x9013+)')
-        row('Equalize duration', f"{W}{equalize_dur}{RS} min")
-        row('Boost duration',    f"{W}{boost_dur}{RS} min")
-        row('Float duration',    f"{W}{float_dur}{RS} min")
+        row('Equalize duration', f"{W}{equalize_dur}{RS} min" if equalize_dur is not None else na)
+        row('Boost duration',    f"{W}{boost_dur}{RS} min"    if boost_dur    is not None else na)
+        row('Float duration',    f"{W}{float_dur}{RS} min"    if float_dur    is not None else na)
 
         print(f"\n  {DM}Ctrl+C to exit • refreshes every {INTERVAL:.0f} s{RS}\n")
         time.sleep(INTERVAL)
