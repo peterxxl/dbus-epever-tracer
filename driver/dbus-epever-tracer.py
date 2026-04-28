@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-2213'
+firmwareversion = 'v2026.04.28-2242'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -183,7 +183,8 @@ REGISTER_CHARGER_STATE = 0x3200  # Charging status, charging stage, etc.
 REGISTER_HISTORY = 0x3300  # Historical generated energy data
 REGISTER_HISTORY_DAILY = 0x330C  # Daily historical generated energy data
 REGISTER_PARAMETERS = 0x9000  # Charging and load parameters
-REGISTER_CHARGE_VOLTAGES = 0x9007  # Boost (absorption) voltage setpoint; 0x9008 = float voltage
+REGISTER_CHARGE_VOLTAGES = 0x9007  # Boost (absorption) voltage setpoint; 0x9008 = float; 0x9009 = boost reconnect
+REGISTER_BOOST_DURATION  = 0x906C  # Boost duration in minutes (holding register)
 
 # controller and servicename are initialised in main() once the serial port
 # is known and validated; declared here so the module-level scope is explicit.
@@ -205,6 +206,7 @@ class DbusEpever(object):
         self._time_in_bulk = 0.0          # In minutes (float with 1 decimal place)
         self._time_in_absorption = 0.0    # In minutes (float with 1 decimal place)
         self._time_in_float = 0.0         # In minutes (float with 1 decimal place)
+        self._absorption_start_time = None  # epoch seconds; set when absorption phase begins
         
         # Day tracking for resetting daily counters
         self._last_day = datetime.now().day
@@ -328,11 +330,13 @@ class DbusEpever(object):
             # Contains: Today's generated energy (low word, high word)
             c330C = controller.read_registers(REGISTER_HISTORY_DAILY, 2, 4)  # c330C[0-1]: Registers 0x330C-0x330D
 
-            # 0x9007: Boost (absorption) voltage setpoint; 0x9008: Float voltage setpoint
-            charge_voltages = controller.read_registers(REGISTER_CHARGE_VOLTAGES, 2, 3)
+            # 0x9007: Boost/absorption setpoint; 0x9008: Float setpoint; 0x9009: Boost reconnect voltage
+            charge_voltages = controller.read_registers(REGISTER_CHARGE_VOLTAGES, 3, 3)
+            # 0x906C: Boost duration in minutes
+            boost_duration_reg = controller.read_registers(REGISTER_BOOST_DURATION, 1, 3)
 
             # Check lengths to avoid IndexError
-            if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(c330C) >= 2 and len(charge_voltages) >= 2):
+            if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(c330C) >= 2 and len(charge_voltages) >= 3 and len(boost_duration_reg) >= 1):
                 logging.warning("Modbus read returned unexpected data lengths.")
                 return True
         except Exception as e:
@@ -371,16 +375,41 @@ class DbusEpever(object):
             # Bits 3–2 of register 0x3201 encode the EPEVER charging phase.
             #
             # EPEVER's "Boost" phase covers both Victron Bulk and Absorption:
-            #   Bulk       — constant current, voltage still rising toward setpoint
-            #   Absorption — voltage held at boost/absorption setpoint, current tapers
-            # We split these using the absorption voltage setpoint (0x9007):
-            # when battery voltage reaches that setpoint we are in Absorption.
-            # A 0.1 V hysteresis prevents state flapping at the boundary.
-            absorption_v = charge_voltages[0] / 100   # 0x9007: boost/absorption setpoint
-            epever_phase = _get_bit(c3200[1], 3) * 2 + _get_bit(c3200[1], 2)
+            #   Bulk       — constant current, voltage rising toward absorption setpoint
+            #   Absorption — voltage held at setpoint, current tapering; timed by 0x906C
+            #
+            # Absorption entry: EPEVER in Boost AND battery voltage reaches 0x9007.
+            # Absorption exit:  voltage drops below boost-reconnect threshold (0x9009),
+            #                   boost duration (0x906C minutes) has elapsed, or EPEVER
+            #                   leaves Boost phase (controller took over transition).
+            absorption_v    = charge_voltages[0] / 100   # 0x9007
+            reconnect_v     = charge_voltages[2] / 100   # 0x9009
+            boost_duration  = boost_duration_reg[0]      # 0x906C, minutes
+
+            epever_phase  = _get_bit(c3200[1], 3) * 2 + _get_bit(c3200[1], 2)
             victron_state = state[epever_phase]
-            if victron_state == 3 and self._dbusservice['/Dc/0/Voltage'] >= absorption_v - 0.1:
-                victron_state = 4  # Absorption
+
+            if victron_state == 3:  # EPEVER Boost phase
+                batt_v = self._dbusservice['/Dc/0/Voltage']
+                if self._absorption_start_time is None:
+                    # Not yet in absorption — check if we've reached the setpoint
+                    if batt_v >= absorption_v:
+                        self._absorption_start_time = time.time()
+                        victron_state = 4
+                else:
+                    elapsed_minutes = (time.time() - self._absorption_start_time) / 60
+                    if batt_v < reconnect_v:
+                        # Voltage collapsed — heavy load or cloud; drop back to Bulk
+                        self._absorption_start_time = None
+                    elif elapsed_minutes >= boost_duration:
+                        # Boost duration expired — controller should switch to Float soon
+                        self._absorption_start_time = None
+                    else:
+                        victron_state = 4
+            else:
+                # EPEVER left Boost phase; clear absorption tracking
+                self._absorption_start_time = None
+
             self._dbusservice['/State'] = victron_state
                 
             # Use the resolved state for time tracking this tick
@@ -424,6 +453,7 @@ class DbusEpever(object):
                 self._time_in_bulk = 0.0
                 self._time_in_absorption = 0.0
                 self._time_in_float = 0.0
+                self._absorption_start_time = None
                 self._dbusservice['/History/Daily/0/MaxPower'] = 0
                 self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = 0
 
@@ -521,6 +551,7 @@ class DbusEpever(object):
                 self._time_in_float   = s.get('time_in_float', 0.0)
                 self._restored_daily_max_power            = s.get('daily_max_power', 0)
                 self._restored_daily_max_battery_current  = s.get('daily_max_battery_current', 0)
+                self._absorption_start_time               = s.get('absorption_start_time', None)
                 logging.info("Restored daily accumulators and history from state file.")
             else:
                 logging.info("State file is from a previous day — history loaded, accumulators start fresh.")
@@ -536,6 +567,7 @@ class DbusEpever(object):
             'time_in_bulk':             self._time_in_bulk,
             'time_in_absorption':       self._time_in_absorption,
             'time_in_float':            self._time_in_float,
+            'absorption_start_time':    self._absorption_start_time,
             'daily_max_power':          self._dbusservice['/History/Daily/0/MaxPower'],
             'daily_max_battery_current': self._dbusservice['/History/Daily/0/MaxBatteryCurrent'],
             'history':                  self._history,
