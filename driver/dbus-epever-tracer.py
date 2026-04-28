@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-2302'
+firmwareversion = 'v2026.04.28-2309'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -252,6 +252,9 @@ class DbusEpever(object):
         self._dbusservice.add_path('/Dc/0/Current', None, gettextcallback=_a)
         self._dbusservice.add_path('/Dc/0/Voltage', None, gettextcallback=_v)
         self._dbusservice.add_path('/Dc/0/Temperature', None, gettextcallback=_c)
+        self._dbusservice.add_path('/Dc/0/Power', None, gettextcallback=_w)
+        self._dbusservice.add_path('/Alarms/TemperatureSensor', 0)
+        self._dbusservice.add_path('/Alarms/HighTemperature', 0)
 
         self._dbusservice.add_path('/Soc', None, gettextcallback=lambda p, v: (str(v) + '%'))
         self._dbusservice.add_path('/State',None)
@@ -367,6 +370,7 @@ class DbusEpever(object):
             self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100      # Register 0x3104: Battery voltage (V), divide by 100
             self._dbusservice['/Dc/0/Current'] = c3100[5]/100      # Register 0x3105: Battery charging current (A), divide by 100
             self._dbusservice['/Dc/0/Temperature'] = c3100[17]/100 # Register 0x3111: Controller temperature (°C), divide by 100
+            self._dbusservice['/Dc/0/Power'] = round((c3100[6] | c3100[7] << 16)/100) # Registers 0x3106-0x3107: Battery charging power (W)
             self._dbusservice['/Soc'] = soc_value                  # Register 0x311A: Battery SOC (%), None if unsupported
             self._dbusservice['/Pv/V'] = c3100[0]/100              # Register 0x3100: PV array voltage (V), divide by 100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 16)/100) # Registers 0x3102-0x3103: PV array charging power (W), divide by 100
