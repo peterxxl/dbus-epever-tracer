@@ -25,6 +25,29 @@ from datetime import datetime, timezone
 _DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(_DIR, '../ext'))
 
+def _apply_venus_timezone():
+    """Read timezone from Venus OS DBus and apply it so Python uses local time.
+
+    Venus OS stores the timezone in its own DBus settings rather than the
+    standard /etc/localtime, so Python's C library sees UTC unless we set
+    TZ explicitly.  This is a no-op on non-Venus systems or if TZ is
+    already set.
+    """
+    if os.environ.get('TZ'):
+        return
+    try:
+        import dbus
+        obj = dbus.SystemBus().get_object(
+            'com.victronenergy.settings', '/Settings/System/TimeZone')
+        tz = str(obj.GetValue())
+        if tz:
+            os.environ['TZ'] = tz
+            time.tzset()
+    except Exception:
+        pass
+
+_apply_venus_timezone()
+
 import minimalmodbus
 
 # ─── CLI args ─────────────────────────────────────────────────────────────────
