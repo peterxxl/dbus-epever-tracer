@@ -20,6 +20,7 @@ import sys
 import os
 import time
 import signal
+from datetime import datetime, timezone
 
 _DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(_DIR, '../ext'))
@@ -359,25 +360,28 @@ def main():
         # ── Draw ─────────────────────────────────────────────────────────────
         if not DUMP:
             clear_screen()
-        now_ts  = time.time()
-        now_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now_ts))
+        # Use timezone-aware local time so the comparison is correct even
+        # when the TZ environment variable is not set (common on Venus OS).
+        now_local = datetime.now(timezone.utc).astimezone()
+        now_str   = now_local.strftime('%Y-%m-%d %H:%M:%S')
+        tz_name   = now_local.strftime('%Z')
         print(f"\n  {BD}{W}EPEVER Tracer — Live Monitor{RS}   "
-              f"{DM}{PORT}  slave={SLAVE}{RS}")
+              f"{DM}{PORT}  slave={SLAVE}  {tz_name}{RS}")
         print(f"  {'═' * 58}")
         if clock_str:
             try:
-                ct        = time.strptime(clock_str, '%Y-%m-%d %H:%M:%S')
-                drift     = int(now_ts - time.mktime(ct))
+                ctrl_dt   = datetime.strptime(clock_str, '%Y-%m-%d %H:%M:%S')
+                drift     = int((now_local.replace(tzinfo=None) - ctrl_dt).total_seconds())
                 drift_abs = abs(drift)
                 sign      = '+' if drift >= 0 else '-'
                 dc        = G if drift_abs < 60 else (Y if drift_abs < 300 else R)
-                drift_str = f"{dc}{sign}{drift_abs} s{RS}"
+                drift_tag = f"{dc}{sign}{drift_abs} s{RS}"
             except Exception:
-                drift_str = f"{DM}?{RS}"
+                drift_tag = f"{DM}?{RS}"
             print(f"  {DM}Controller : {RS}{clock_str}")
-            print(f"  {DM}System     : {RS}{now_str}   [{drift_str}{DM}]{RS}")
+            print(f"  {DM}System     : {RS}{now_str}   [{drift_tag}{DM}]{RS}")
         else:
-            print(f"  {DM}System     : {now_str}{RS}")
+            print(f"  {DM}System     : {now_str}  {tz_name}{RS}")
         print(f"  {'═' * 58}")
 
         # PV array

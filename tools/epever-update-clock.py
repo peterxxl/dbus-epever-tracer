@@ -18,6 +18,7 @@ Examples:
 import sys
 import os
 import time
+from datetime import datetime, timezone
 
 _DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(_DIR, '../ext'))
@@ -42,8 +43,17 @@ RS = '\033[0m'
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def local_now():
+    """Return current local time as a timezone-aware datetime.
+
+    datetime.now(timezone.utc).astimezone() always resolves to true local
+    time via the system timezone database, regardless of whether the TZ
+    environment variable is set (common on Venus OS service processes).
+    """
+    return datetime.now(timezone.utc).astimezone()
+
 def read_clock(instr):
-    """Return (clock_str, struct_time) or (None, None) on failure."""
+    """Return the controller RTC as a naive local datetime, or None on failure."""
     try:
         regs = instr.read_registers(0x9013, 3, 3)
         sec  =  regs[0] & 0xFF
@@ -52,30 +62,29 @@ def read_clock(instr):
         day  = (regs[1] >> 8) & 0xFF
         mon  =  regs[2] & 0xFF
         yr   = (regs[2] >> 8) & 0xFF
-        s    = f"20{yr:02d}-{mon:02d}-{day:02d} {hr:02d}:{mn:02d}:{sec:02d}"
-        st   = time.strptime(s, '%Y-%m-%d %H:%M:%S')
-        return s, st
-    except Exception as e:
-        return None, None
+        return datetime(2000 + yr, mon, day, hr, mn, sec)
+    except Exception:
+        return None
 
-def drift_str(now_ts, ct):
-    drift     = int(now_ts - time.mktime(ct))
-    drift_abs = abs(drift)
-    sign      = '+' if drift >= 0 else '-'
+def drift_label(drift_sec):
+    drift_abs = abs(drift_sec)
+    sign      = '+' if drift_sec >= 0 else '-'
     dc        = G if drift_abs < 60 else (Y if drift_abs < 300 else R)
     return f"{dc}{sign}{drift_abs} s{RS}", drift_abs
 
-def write_clock(instr, t):
-    """Write struct_time t to the controller RTC (registers 0x9013–0x9015)."""
-    reg0 = ((t.tm_min  & 0xFF) << 8) | (t.tm_sec  & 0xFF)
-    reg1 = ((t.tm_mday & 0xFF) << 8) | (t.tm_hour & 0xFF)
-    reg2 = ((t.tm_year % 100  ) << 8) | (t.tm_mon  & 0xFF)
+def write_clock(instr, dt):
+    """Write a datetime to the controller RTC (registers 0x9013–0x9015)."""
+    reg0 = ((dt.minute & 0xFF) << 8) | (dt.second & 0xFF)
+    reg1 = ((dt.day    & 0xFF) << 8) | (dt.hour   & 0xFF)
+    reg2 = ((dt.year % 100   ) << 8) | (dt.month  & 0xFF)
     instr.write_registers(0x9013, [reg0, reg1, reg2])
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print(f"\n  {BD}{W}EPEVER Tracer — Update Clock{RS}   {DM}{PORT}  slave={SLAVE}{RS}\n")
+    now      = local_now()
+    tz_name  = now.strftime('%Z')
+    print(f"\n  {BD}{W}EPEVER Tracer — Update Clock{RS}   {DM}{PORT}  slave={SLAVE}  tz={tz_name}{RS}\n")
 
     instr = minimalmodbus.Instrument(PORT, SLAVE)
     instr.serial.baudrate = 115200
@@ -90,18 +99,20 @@ def main():
 
     # ── Read current controller clock ─────────────────────────────────────────
     print(f"  Reading controller clock...")
-    clock_str, clock_st = read_clock(instr)
-    now_ts  = time.time()
-    now_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now_ts))
+    ctrl_dt = read_clock(instr)
+    now     = local_now()
 
-    if clock_str is None:
+    if ctrl_dt is None:
         print(f"  {R}Failed to read controller clock. Is the device connected?{RS}\n")
         sys.exit(1)
 
-    ds, drift_abs = drift_str(now_ts, clock_st)
+    # Both are local time; compare directly as naive datetimes.
+    drift_sec        = int((now.replace(tzinfo=None) - ctrl_dt).total_seconds())
+    dl, drift_abs    = drift_label(drift_sec)
+
     print(f"\n  {'Before':─<54}")
-    print(f"  {'Controller':12s}  {clock_str}")
-    print(f"  {'System':12s}  {now_str}   [{ds}{DM}]{RS}")
+    print(f"  {'Controller':12s}  {ctrl_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  {'System':12s}  {now.strftime('%Y-%m-%d %H:%M:%S')}   [{dl}{DM}]{RS}")
 
     if drift_abs == 0:
         print(f"\n  {G}Clock is already in sync. Nothing to do.{RS}\n")
@@ -120,9 +131,9 @@ def main():
         sys.exit(0)
 
     # ── Write ─────────────────────────────────────────────────────────────────
-    now_lt = time.localtime()
+    write_dt = local_now()
     try:
-        write_clock(instr, now_lt)
+        write_clock(instr, write_dt)
     except Exception as e:
         print(f"\n  {R}Write failed: {e}{RS}\n")
         sys.exit(1)
@@ -130,15 +141,15 @@ def main():
     time.sleep(0.5)
 
     # ── Read back and confirm ─────────────────────────────────────────────────
-    clock_str2, clock_st2 = read_clock(instr)
-    now_ts2  = time.time()
-    now_str2 = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now_ts2))
+    ctrl_dt2      = read_clock(instr)
+    now2          = local_now()
 
     print(f"\n  {'After':─<54}")
-    if clock_str2:
-        ds2, drift_abs2 = drift_str(now_ts2, clock_st2)
-        print(f"  {'Controller':12s}  {clock_str2}")
-        print(f"  {'System':12s}  {now_str2}   [{ds2}{DM}]{RS}")
+    if ctrl_dt2:
+        drift_sec2    = int((now2.replace(tzinfo=None) - ctrl_dt2).total_seconds())
+        dl2, drift_abs2 = drift_label(drift_sec2)
+        print(f"  {'Controller':12s}  {ctrl_dt2.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  {'System':12s}  {now2.strftime('%Y-%m-%d %H:%M:%S')}   [{dl2}{DM}]{RS}")
         if drift_abs2 <= 2:
             print(f"\n  {G}{BD}Clock updated successfully.{RS}\n")
         else:
