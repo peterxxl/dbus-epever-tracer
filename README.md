@@ -11,7 +11,7 @@ Bridges an EPEVER Tracer controller to Victron's Venus OS ecosystem over Modbus 
 | Component | Version / Model |
 |---|---|
 | Venus OS device | Victron Cerbo-S GX |
-| Venus OS | v3.60, v3.72 |
+| Venus OS | v3.60, v3.72, v3.80 |
 | Solar charge controller | EPEVER Tracer 3210A MPPT |
 | RS-485 adapter | Victron Energy USB RS485 cable (FT232R chipset) |
 
@@ -88,7 +88,7 @@ Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Fl
 
 ## Software requirements
 
-- Venus OS v3.60 or later (tested up to v3.72)
+- Venus OS v3.60 or later (tested up to v3.80)
 - Root SSH access to the Venus OS device
 - Internet access from the device during installation
 
