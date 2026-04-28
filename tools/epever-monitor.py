@@ -150,7 +150,7 @@ def main():
     instr.serial.bytesize = 8
     instr.serial.parity   = 'N'
     instr.serial.stopbits = 1
-    instr.serial.timeout  = 0.2   # match driver; exception responses arrive in < 5 ms
+    instr.serial.timeout  = 0.5   # 200 ms is too tight for the 45-byte stats block
     instr.mode = minimalmodbus.MODE_RTU
     instr.debug = False
 
@@ -165,6 +165,21 @@ def main():
         print()
 
     signal.signal(signal.SIGINT, lambda *_: (print(f"\n{RS}Bye.\n"), sys.exit(0)))
+
+    # Warn if the EPEVER driver is already polling the same port.
+    # Both processes share the serial bus; whichever reads first takes the
+    # controller's response, leaving the other with garbage or nothing.
+    import subprocess
+    try:
+        out = subprocess.check_output(['pgrep', '-a', '-f', 'dbus-epever-tracer'],
+                                      stderr=subprocess.DEVNULL).decode()
+        tty = PORT.split('/')[-1]
+        if 'dbus-epever-tracer.py' in out:
+            print(f"\n  {Y}{BD}Warning:{RS} {Y}the EPEVER driver is running and polling {PORT}.{RS}")
+            print(f"  {Y}Intermittent checksum errors are expected until you stop it:{RS}")
+            print(f"  {W}  svc -d /service/dbus-epever-tracer.{tty}{RS}\n")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass  # pgrep not found or no match — fine
 
     errors = 0
     while True:
