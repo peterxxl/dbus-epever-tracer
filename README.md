@@ -137,11 +137,9 @@ Open `driver/dbus-epever-tracer.py` and edit the constants near the top of the f
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `softwareversion` | `'0.9'` | Reported driver version |
 | `serialnumber` | `'WO20160415-008-0056'` | Device serial shown in VRM |
 | `productname` | `'Epever Tracer MPPT'` | Product name shown in VRM |
-| `customname` | `'Cargador FV'` | Friendly display name |
-| `firmwareversion` | `'v1.04'` | Controller firmware version |
+| `firmwareversion` | _(auto-stamped)_ | Set to `vYYYY.MM.DD-HHMM` by the pre-commit hook on every commit |
 | `deviceinstance` | `278` | VRM device instance number |
 
 ---
