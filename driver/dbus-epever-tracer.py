@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-2126'
+firmwareversion = 'v2026.04.28-2203'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -183,7 +183,7 @@ REGISTER_CHARGER_STATE = 0x3200  # Charging status, charging stage, etc.
 REGISTER_HISTORY = 0x3300  # Historical generated energy data
 REGISTER_HISTORY_DAILY = 0x330C  # Daily historical generated energy data
 REGISTER_PARAMETERS = 0x9000  # Charging and load parameters
-REGISTER_BOOST_VOLTAGE = 0x9002  # Boost voltage setpoint
+REGISTER_CHARGE_VOLTAGES = 0x9007  # Boost (absorption) voltage setpoint; 0x9008 = float voltage
 
 # controller and servicename are initialised in main() once the serial port
 # is known and validated; declared here so the module-level scope is explicit.
@@ -328,13 +328,11 @@ class DbusEpever(object):
             # Contains: Today's generated energy (low word, high word)
             c330C = controller.read_registers(REGISTER_HISTORY_DAILY, 2, 4)  # c330C[0-1]: Registers 0x330C-0x330D
 
-            # REGISTER_BOOST_VOLTAGE (0x9002): Battery charging parameters
-            # Contains: Boost and float charging voltage setpoints
-            boostchargingvoltage = controller.read_registers(REGISTER_BOOST_VOLTAGE, 2, 3)
-            #logging.info(f"boost charging voltage: {boostchargingvoltage[0]}, float charging voltage: {boostchargingvoltage[1]}")
+            # 0x9007: Boost (absorption) voltage setpoint; 0x9008: Float voltage setpoint
+            charge_voltages = controller.read_registers(REGISTER_CHARGE_VOLTAGES, 2, 3)
 
             # Check lengths to avoid IndexError
-            if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(c330C) >= 2 and len(boostchargingvoltage) >= 2):
+            if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(c330C) >= 2 and len(charge_voltages) >= 2):
                 logging.warning("Modbus read returned unexpected data lengths.")
                 return True
         except Exception as e:
@@ -367,20 +365,26 @@ class DbusEpever(object):
             self._dbusservice['/ErrorCode'] = map_epever_error(c3200[0], c3200[1])
             self._dbusservice['/WarningCode'] = map_epever_warning(c3200[0])
 
-            # Map EPEVER charger state to Victron state for VRM compatibility
-            # Victron: 0=Off, 2=Fault, 3=Bulk, 4=Absorption, 5=Float, 6=Storage, 7=Equalize
-            # Epever:  00=No charging, 01=Float, 10=Boost, 11=Equalizing
-            # Bits 2-3 of register 0x3201 (charging status) indicate the charging state
-            # getBit extracts specific bits from the charging status register
-            self._dbusservice['/State'] = state[_get_bit(c3200[1], 3) * 2 + _get_bit(c3200[1], 2)]
-            
-            # Special case: if in Bulk and battery voltage > float set Absorption
-            # boostchargingvoltage[1] = Register 0x9001: Float charging voltage (x100 V)
-            if self._dbusservice['/State'] == 3 and self._dbusservice['/Dc/0/Voltage'] > boostchargingvoltage[1]/100:
-                self._dbusservice['/State'] = 4
+            # Map EPEVER charger state to Victron state for VRM compatibility.
+            # Victron: 0=Off, 3=Bulk, 4=Absorption, 5=Float, 6=Equalise
+            # EPEVER:  00=No charging, 01=Float, 10=Boost, 11=Equalizing
+            # Bits 3–2 of register 0x3201 encode the EPEVER charging phase.
+            #
+            # EPEVER's "Boost" phase covers both Victron Bulk and Absorption:
+            #   Bulk       — constant current, voltage still rising toward setpoint
+            #   Absorption — voltage held at boost/absorption setpoint, current tapers
+            # We split these using the absorption voltage setpoint (0x9007):
+            # when battery voltage reaches that setpoint we are in Absorption.
+            # A 0.1 V hysteresis prevents state flapping at the boundary.
+            absorption_v = charge_voltages[0] / 100   # 0x9007: boost/absorption setpoint
+            epever_phase = _get_bit(c3200[1], 3) * 2 + _get_bit(c3200[1], 2)
+            victron_state = state[epever_phase]
+            if victron_state == 3 and self._dbusservice['/Dc/0/Voltage'] >= absorption_v - 0.1:
+                victron_state = 4  # Absorption
+            self._dbusservice['/State'] = victron_state
                 
-            # Get current state for time tracking
-            current_state = self._dbusservice['/State']
+            # Use the resolved state for time tracking this tick
+            current_state = victron_state
             
             # Update charge phase time tracking
             now = time.time()
