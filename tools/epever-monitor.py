@@ -409,90 +409,90 @@ def main():
 
         # PV array
         section('PV Array  (0x3100–0x3103)')
-        row('Voltage',  v(pv_v))
-        row('Current',  a(pv_a))
-        row('Power',    w(pv_w))
+        row('Voltage',  v(pv_v),  '0x3100')
+        row('Current',  a(pv_a),  '0x3101')
+        row('Power',    w(pv_w),  '0x3102–0x3103')
 
         # Battery
         section('Battery  (0x3104–0x3107, 0x3110–0x3111)')
-        row('Voltage',               v(batt_v))
-        row('Charging current',      a(batt_a))
-        row('Charging power',        w(batt_w))
-        row('Temperature (0x3110)',  c(batt_temp_3110))
+        row('Voltage',               v(batt_v),          '0x3104')
+        row('Charging current',      a(batt_a),          '0x3105')
+        row('Charging power',        w(batt_w),          '0x3106–0x3107')
+        row('Temperature',           c(batt_temp_3110),  '0x3110')
         if remote_temp is not None:
-            row('Remote temperature (0x311B)', c(remote_temp))
+            row('Remote temperature',     c(remote_temp),     '0x311B')
         if soc is not None and soc != 0:
-            row('State of charge (0x311A)', pct(soc))
+            row('State of charge',        pct(soc),           '0x311A')
         else:
-            row('State of charge (0x311A)', na(), 'not supported by this model')
-        row('Status  (0x3200)',      decode_batt_status(batt_status), f'raw 0x{batt_status:04X}')
+            row('State of charge',        na(),               '0x311A — not supported by this model')
+        row('Status',                decode_batt_status(batt_status), f'0x3200  raw 0x{batt_status:04X}')
 
         # Charging state
         section('Charging State  (0x3201)')
-        row('Stage',  decode_chg_status(chg_status), f'raw 0x{chg_status:04X}')
+        row('Stage',  decode_chg_status(chg_status), f'0x3201  raw 0x{chg_status:04X}')
         row('Stage bits [3:2]',
             f"{G}{BD}{CHARGING_STAGE.get(chg_stage, '?')}{RS}",
             f'bits={chg_stage:02b}')
 
         # Controller
         section('Controller  (0x3111)')
-        row('Internal temp (0x3111)',  c(ctrl_temp_3111))
+        row('Internal temp',           c(ctrl_temp_3111),              '0x3111')
         if dis_ot is not None:
             ot_str = f"{R}YES — over temperature!{RS}" if dis_ot else f"{G}Normal{RS}"
-            row('Over-temperature flag (0x2000)', ot_str)
+            row('Over-temperature flag',  ot_str,                      '0x2000')
         if dis_dn is not None:
             dn_str = f"{DM}Night{RS}" if dis_dn else f"{G}Day{RS}"
-            row('Day / Night (0x200C)', dn_str)
+            row('Day / Night',            dn_str,                      '0x200C')
         if sys_volt is not None:
-            row('System rated voltage (0x311D)', f"{W}{sys_volt:.0f}{RS} V")
+            row('System rated voltage',   f"{W}{sys_volt:.0f}{RS} V",  '0x311D')
 
         # Load
         section('Load Output')
-        row('Relay state (0x3202)',      f"{G}On{RS}" if load_state else f"{DM}Off{RS}")
-        row('Current at 0x310D',        a(load_a_driver), '← driver-confirmed register')
-        row('Voltage at 0x3108',        v(load_v_108),    '← may be load or unused')
-        row('Current at 0x3109',        a(load_a_109))
-        row('Power   at 0x310A',        w(load_w_10a))
-        row('Raw reg 0x310C',           f"{W}{reg_10c}{RS}", 'temp or alt load voltage')
+        row('Relay state',   f"{G}On{RS}" if load_state else f"{DM}Off{RS}",  '0x3202')
+        row('Current',       a(load_a_driver),  '0x310D  driver-confirmed register')
+        row('Voltage',       v(load_v_108),     '0x3108  may be load or unused')
+        row('Current',       a(load_a_109),     '0x3109  spec register')
+        row('Power',         w(load_w_10a),     '0x310A')
+        row('Raw reg',       f"{W}{reg_10c}{RS}", '0x310C  temp or alt load voltage')
         if load_mode is not None:
-            row('Control mode (0x903D)', f"{W}{load_mode}{RS}")
+            row('Control mode',  f"{W}{load_mode}{RS}",  '0x903D')
 
         # Generated energy
         section('Generated Energy  (PV → battery, 0x330C–0x3313)')
-        row('Today',      kwh(generated_today))
-        row('This month', kwh(generated_month))
-        row('This year',  kwh(generated_year))
-        row('All time',   kwh(generated_total))
+        row('Today',      kwh(generated_today),   '0x330C–0x330D')
+        row('This month', kwh(generated_month),   '0x330E–0x330F')
+        row('This year',  kwh(generated_year),    '0x3310–0x3311')
+        row('All time',   kwh(generated_total),   '0x3312–0x3313')
 
         # Consumed energy
         section('Consumed Energy  (load output, 0x3304+)')
-        row('Today',      kwh(consumed_today))
-        row('This month', kwh(consumed_month))
-        row('This year',  kwh(consumed_year))
-        row('All time',   kwh(consumed_total))
+        row('Today',      kwh(consumed_today),    '0x3304–0x3305')
+        row('This month', kwh(consumed_month),    '0x3306–0x3307')
+        row('This year',  kwh(consumed_year),     '0x3308–0x3309')
+        row('All time',   kwh(consumed_total),    '0x330A–0x330B')
 
         # Today's records
         section("Today's Records  (0x3300–0x3303)")
-        row('Max PV voltage',      v(today_max_pv_v))
-        row('Min PV voltage',      v(today_min_pv_v))
-        row('Max battery voltage', v(today_max_batt_v))
-        row('Min battery voltage', v(today_min_batt_v))
+        row('Max PV voltage',      v(today_max_pv_v),   '0x3300')
+        row('Min PV voltage',      v(today_min_pv_v),   '0x3301')
+        row('Max battery voltage', v(today_max_batt_v), '0x3302')
+        row('Min battery voltage', v(today_min_batt_v), '0x3303')
 
         # Charging parameters
         section('Charging Parameters  (0x9000–0x900E)')
-        row('Battery type',            f"{W}{batt_type}{RS}"          if batt_type     is not None else na())
-        row('Battery capacity',        f"{W}{batt_cap_ah}{RS} Ah"     if batt_cap_ah   is not None else na())
+        row('Battery type',            f"{W}{batt_type}{RS}"          if batt_type     is not None else na(), '0x9000')
+        row('Battery capacity',        f"{W}{batt_cap_ah}{RS} Ah"     if batt_cap_ah   is not None else na(), '0x9001')
         row('Battery management mode', f"{W}{mgmt_mode}{RS}"          if mgmt_mode     is not None else na(), '0x9070')
-        row('High voltage disconnect', v(ov_disc_v)                   if ov_disc_v     is not None else na())
-        row('Charging limit voltage',  v(chg_limit_v)                 if chg_limit_v   is not None else na())
-        row('Equalize voltage',        v(equalize_v)                  if equalize_v    is not None else na())
-        row('Boost voltage',           v(boost_v)                     if boost_v       is not None else na())
-        row('Float voltage',           v(float_v)                     if float_v       is not None else na())
-        row('Boost reconnect voltage', v(boost_recon_v)               if boost_recon_v is not None else na())
-        row('Low voltage reconnect',   v(lv_recon_v)                  if lv_recon_v    is not None else na())
-        row('Under-voltage warning',   v(uv_warn_v)                   if uv_warn_v     is not None else na())
-        row('Low voltage disconnect',  v(lv_disc_v)                   if lv_disc_v     is not None else na())
-        row('Temp compensation',       f"{W}{temp_comp}{RS} mV/°C/2V" if temp_comp     is not None else na())
+        row('High voltage disconnect', v(ov_disc_v)                   if ov_disc_v     is not None else na(), '0x9003')
+        row('Charging limit voltage',  v(chg_limit_v)                 if chg_limit_v   is not None else na(), '0x9004')
+        row('Equalize voltage',        v(equalize_v)                  if equalize_v    is not None else na(), '0x9006')
+        row('Boost voltage',           v(boost_v)                     if boost_v       is not None else na(), '0x9007')
+        row('Float voltage',           v(float_v)                     if float_v       is not None else na(), '0x9008')
+        row('Boost reconnect voltage', v(boost_recon_v)               if boost_recon_v is not None else na(), '0x9009')
+        row('Low voltage reconnect',   v(lv_recon_v)                  if lv_recon_v    is not None else na(), '0x900A')
+        row('Under-voltage warning',   v(uv_warn_v)                   if uv_warn_v     is not None else na(), '0x900C')
+        row('Low voltage disconnect',  v(lv_disc_v)                   if lv_disc_v     is not None else na(), '0x900D')
+        row('Temp compensation',       f"{W}{temp_comp}{RS} mV/°C/2V" if temp_comp     is not None else na(), '0x9002')
 
         # Temperature protection thresholds
         if params2:
