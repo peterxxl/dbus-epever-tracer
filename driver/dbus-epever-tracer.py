@@ -66,7 +66,7 @@ from vedbus import VeDbusService  # Victron's DBus service implementation
 # Global configuration variables
 # ===============================
 # These variables define the driver version, device identity, and service settings.
-softwareversion = '0.9'
+softwareversion = 'v2026.04.28-1015'
 serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076

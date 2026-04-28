@@ -1,0 +1,8 @@
+#!/bin/bash
+# Stamps softwareversion in the driver with the current date/time before each commit.
+
+VERSION="v$(date '+%Y.%m.%d-%H%M')"
+FILE="driver/dbus-epever-tracer.py"
+
+sed -i.bak "s/^softwareversion = .*/softwareversion = '$VERSION'/" "$FILE" && rm -f "${FILE}.bak"
+git add "$FILE"
