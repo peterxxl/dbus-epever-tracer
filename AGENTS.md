@@ -43,8 +43,8 @@ The process is supervised by daemontools/runit (Venus OS standard). If it exits,
 | `driver/start-dbus-epever-tracer.sh` | Shell wrapper; sources Victron's `run-service.sh` then calls the Python script with the serial port |
 | `service/run` | Daemontools run script; redirects stderr and launches the shell wrapper |
 | `service/log/run` | Daemontools log script; runs `multilog` to rotate logs |
-| `install.sh` | First-time installer for Venus OS |
-| `update.sh` | In-place updater; same as install but uses `ln -sf` |
+| `setup-epever-driver.sh` | Combined installer / updater / remover for Venus OS |
+| `setup.sh` | Idempotent post-update OS config (symlinks, serial-starter, udev, boot hooks) |
 | `epsolar_modbus_protocol_map.md` | Full EPEVER LS-B register map — the primary hardware reference |
 | `serial-starter.rules.default` | Example udev rules; the installer appends a rule to the live file |
 
@@ -164,3 +164,6 @@ The address `1` is the second argument to `minimalmodbus.Instrument(port, 1)`. S
 1. Edit the file locally.
 2. `scp driver/dbus-epever-tracer.py root@<device-ip>:/data/dbus-epever-tracer/driver/`
 3. `ssh root@<device-ip> svc -t /service/dbus-epever-tracer.ttyUSB0`
+
+**Install / update / remove on device**
+Run `setup-epever-driver.sh` on the Venus OS device. It auto-detects whether the driver is installed and offers install, update, or remove.

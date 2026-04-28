@@ -94,36 +94,41 @@ Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Fl
 
 ---
 
-## Installation
+## Installation, updating, and removal
+
+A single script handles everything:
 
 ```sh
 # SSH into your Venus OS device as root, then:
-wget https://github.com/peterxxl/dbus-epever-tracer/raw/master/install.sh
-chmod +x install.sh
-./install.sh
+wget https://github.com/peterxxl/dbus-epever-tracer/raw/master/setup-epever-driver.sh
+chmod +x setup-epever-driver.sh
+./setup-epever-driver.sh
 ```
 
-Answer `Y` at the prompt. The script will:
+The script detects whether the driver is already installed and presents the appropriate options:
 
-1. Install `python3-pip` via `opkg` and the `minimalmodbus` library via `pip3`.
-2. Download and extract this repository and Victron's `velib_python` library.
-3. Organise files under `/data/dbus-epever-tracer/`.
+- **Not installed** — confirms and installs
+- **Already installed** — offers to update or remove
+
+**Install** will:
+
+1. Install `python3-serial` via `opkg`.
+2. Download this repository and Victron's `velib_python` library.
+3. Place files under `/data/dbus-epever-tracer/` (survives OS updates).
 4. Add an `epever` entry to `/etc/venus/serial-starter.conf`.
-5. Add a udev rule for the FT232R USB adapter to `/etc/udev/rules.d/serial-starter.rules`.
-6. Create symlinks under `/opt/victronenergy/` so Venus OS finds the service.
-7. Restart `serial-starter` so the driver starts immediately without a reboot.
+5. Add a udev rule for the FT232R USB adapter.
+6. Create symlinks under `/opt/victronenergy/` and register boot hooks.
+7. Restart `serial-starter` so the driver starts immediately — no reboot needed.
 
----
+**Update** downloads the latest release and restarts the driver in place.
 
-## Updating
-
-```sh
-wget https://github.com/peterxxl/dbus-epever-tracer/raw/master/update.sh
-chmod +x update.sh
-./update.sh
-```
-
-The update script follows the same steps as the installer but uses `ln -sf` so existing symlinks are replaced safely. It automatically restarts the running driver service when done — no reboot needed.
+**Remove** cleanly undoes every change the installer made:
+- Stops and removes the driver service
+- Removes symlinks from `/opt/victronenergy/`
+- Removes only the epever line from `serial-starter.conf`
+- Removes only the Epever udev rule from the rules file
+- Removes boot hook entries from `/data/rcS.local` and `/data/rc.local`
+- Optionally deletes the driver files from `/data/dbus-epever-tracer/`
 
 ---
 
@@ -174,8 +179,8 @@ dbus-epever-tracer/
 │   ├── run                          Daemontools service run script
 │   └── log/run                      Daemontools log run script
 ├── epsolar_modbus_protocol_map.md   EPEVER register reference
-├── install.sh                       First-time installation
-├── update.sh                        In-place update
+├── setup-epever-driver.sh           Install / update / remove
+├── setup.sh                         Post-update OS config (boot hooks, symlinks, udev)
 └── serial-starter.rules.default     Example udev rules
 ```
 
