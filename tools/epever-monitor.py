@@ -150,7 +150,7 @@ def main():
     instr.serial.bytesize = 8
     instr.serial.parity   = 'N'
     instr.serial.stopbits = 1
-    instr.serial.timeout  = 0.5   # short enough to not stall on exception responses
+    instr.serial.timeout  = 0.2   # match driver; exception responses arrive in < 5 ms
     instr.mode = minimalmodbus.MODE_RTU
     instr.debug = False
 
@@ -197,12 +197,9 @@ def main():
                 read_errors[key] = str(exc)
                 return None
 
-        # ── Rated data (FC04, input registers) ───────────────────────────────
-        rated   = safe_read(0x3000, 15, 4, 'rated (0x3000)')
-        # ── Real-time data (FC04) ─────────────────────────────────────────────
-        # Reads 0x3100–0x3117 (24 regs); covers both possible load register
-        # positions (0x3108 used by Tracer-AN, 0x310C per LS-B protocol map)
-        rt      = safe_read(0x3100, 24, 4, 'real-time (0x3100)')
+        # ── Real-time data (FC04, 0x3100–0x3111 = 18 regs) ──────────────────
+        # Count confirmed by the working driver; 24 causes immediate exception 02.
+        rt      = safe_read(0x3100, 18, 4, 'real-time (0x3100)')
         # ── Extended real-time: SOC, remote temp, system voltage (FC04) ──────
         # 0x311A returns Modbus exception 02 (Illegal Data Address) on Tracer-AN;
         # read one register at a time so a single unsupported address doesn't
@@ -212,8 +209,9 @@ def main():
         rt_ext_sysvolt = safe_read(0x311D, 1, 4, 'sys-volt (0x311D)')
         # ── Status (FC04) ─────────────────────────────────────────────────────
         st      = safe_read(0x3200, 3, 4, 'status (0x3200)')
-        # ── Statistics (FC04) — extended to cover consumed energy + net current
-        hist    = safe_read(0x3300, 32, 4, 'statistics (0x3300)')  # 0x3300–0x331F
+        # ── Statistics (FC04, 0x3300–0x3313 = 20 regs) ──────────────────────
+        # Dump confirmed the controller sends exactly 20 regs; 32 causes exception 02.
+        hist    = safe_read(0x3300, 20, 4, 'statistics (0x3300)')
         # ── Charging parameters (FC03, holding registers) ─────────────────────
         params  = safe_read(0x9000, 15, 3, 'params (0x9000)')  # 0x9000–0x900E
         params2 = safe_read(0x9016, 12, 3, 'params2 (0x9016)') # 0x9016–0x9021 (temp limits, night/day V)
@@ -236,7 +234,7 @@ def main():
             continue
         errors = 0
 
-        # ── Parse real-time ───────────────────────────────────────────────────
+        # ── Parse real-time (0x3100–0x3111, indices 0–17) ────────────────────
         pv_v   = rt[0] / 100
         pv_a   = rt[1] / 100
         pv_w   = word32(rt, 2, 3) / 100
@@ -244,19 +242,17 @@ def main():
         batt_a = rt[5] / 100
         batt_w = word32(rt, 6, 7) / 100
 
-        # Load data: Tracer-AN uses 0x3108 (rt[8]); LS-B protocol says 0x310C (rt[12]).
-        # Display both so the user can see which has valid data.
+        # 0x3108–0x310B: load voltage/current/power (LS-B protocol position A)
         load_v_108 = rt[8] / 100
         load_a_109 = rt[9] / 100
         load_w_10a = word32(rt, 10, 11) / 100
-        load_v_10c = rt[12] / 100
-        load_a_10d = rt[13] / 100
-        load_w_10e = word32(rt, 14, 15) / 100
-
-        # Temperatures: per LS-B protocol map
-        batt_temp_3110     = signed16(rt[16]) / 100  # 0x3110 battery temp
-        ctrl_temp_3111     = signed16(rt[17]) / 100  # 0x3111 controller temp
-        heatsink_temp_3112 = signed16(rt[18]) / 100  # 0x3112 power component temp
+        # 0x310C–0x310F: temperature or alternate load position depending on model
+        reg_10c = rt[12]
+        # 0x310D: load current per the working driver (confirmed against VRM output)
+        load_a_driver = rt[13] / 100
+        # 0x3110–0x3111: temperature registers
+        batt_temp_3110 = signed16(rt[16]) / 100
+        ctrl_temp_3111 = signed16(rt[17]) / 100
 
         # ── Parse extended real-time ──────────────────────────────────────────
         soc         = rt_ext_soc[0]              if rt_ext_soc    else None  # 0x311A
@@ -269,33 +265,20 @@ def main():
         load_state  = st[2]
         chg_stage   = (chg_status >> 2) & 0x03
 
-        # ── Parse statistics ──────────────────────────────────────────────────
+        # ── Parse statistics (0x3300–0x3313, indices 0–19) ───────────────────
         today_max_pv_v   = hist[0] / 100
         today_min_pv_v   = hist[1] / 100
         today_max_batt_v = hist[2] / 100
         today_min_batt_v = hist[3] / 100
-        consumed_today   = word32(hist, 4, 5) / 100    # 0x3304–0x3305
-        consumed_month   = word32(hist, 6, 7) / 100    # 0x3306–0x3307
-        consumed_year    = word32(hist, 8, 9) / 100    # 0x3308–0x3309
+        consumed_today   = word32(hist, 4,  5)  / 100  # 0x3304–0x3305
+        consumed_month   = word32(hist, 6,  7)  / 100  # 0x3306–0x3307
+        consumed_year    = word32(hist, 8,  9)  / 100  # 0x3308–0x3309
         consumed_total   = word32(hist, 10, 11) / 100  # 0x330A–0x330B
         generated_today  = word32(hist, 12, 13) / 100  # 0x330C–0x330D
         generated_month  = word32(hist, 14, 15) / 100  # 0x330E–0x330F
         generated_year   = word32(hist, 16, 17) / 100  # 0x3310–0x3311
         generated_total  = word32(hist, 18, 19) / 100  # 0x3312–0x3313
-        co2_reduction    = word32(hist, 20, 21) / 100  # 0x3314–0x3315
-        net_batt_a       = (word32(hist, 27, 28) / 100) if len(hist) >= 29 else None  # 0x331B–0x331C (signed)
-        batt_temp_331d   = (signed16(hist[29]) / 100) if len(hist) >= 30 else None    # 0x331D
-        ambient_temp     = (signed16(hist[30]) / 100) if len(hist) >= 31 else None    # 0x331E
-
-        # ── Parse rated data ─────────────────────────────────────────────────
-        rated_pv_v   = (rated[0] / 100) if rated else None
-        rated_pv_a   = (rated[1] / 100) if rated else None
-        rated_pv_w   = (word32(rated, 2, 3) / 100) if rated else None
-        rated_batt_v = (rated[4] / 100) if rated else None
-        rated_chg_a  = (rated[5] / 100) if rated else None
-        rated_chg_w  = (rated[6] / 100) if rated else None
-        chg_mode     = CHARGING_MODE.get(rated[8], f'Unknown ({rated[8]})') if rated else None
-        rated_load_a = (rated[14] / 100) if rated else None
+        # 0x3314+ not available (controller only returns 20 registers)
 
         # ── Parse charging parameters ─────────────────────────────────────────
         if params:
@@ -368,16 +351,6 @@ def main():
             print(f"  {DM}Controller clock: {clock_str}{RS}")
         print(f"  {'═' * 58}")
 
-        # Rated specs
-        section('Rated Specifications  (0x3000+, read once at install)')
-        row('Charging mode',      f"{W}{chg_mode}{RS}"        if chg_mode     else na())
-        row('Rated PV voltage',   v(rated_pv_v)               if rated_pv_v   is not None else na())
-        row('Rated PV current',   a(rated_pv_a)               if rated_pv_a   is not None else na())
-        row('Rated PV power',     w(rated_pv_w)               if rated_pv_w   is not None else na())
-        row('Rated battery voltage', v(rated_batt_v)          if rated_batt_v is not None else na())
-        row('Rated charging current', a(rated_chg_a)          if rated_chg_a  is not None else na())
-        row('Rated load current', a(rated_load_a)             if rated_load_a is not None else na())
-
         # PV array
         section('PV Array  (0x3100–0x3103)')
         row('Voltage',  v(pv_v))
@@ -385,15 +358,13 @@ def main():
         row('Power',    w(pv_w))
 
         # Battery
-        section('Battery  (0x3104–0x3107, 0x3110, 0x311A–0x311B)')
+        section('Battery  (0x3104–0x3107, 0x3110–0x3111)')
         row('Voltage',               v(batt_v))
         row('Charging current',      a(batt_a))
         row('Charging power',        w(batt_w))
-        row('Temperature (0x3110)',  c(batt_temp_3110),  'battery sensor per LS-B map')
+        row('Temperature (0x3110)',  c(batt_temp_3110))
         if remote_temp is not None:
-            row('Remote temperature (0x311B)', c(remote_temp), 'external sensor')
-        if batt_temp_331d is not None:
-            row('Temperature (0x331D)',  c(batt_temp_331d), 'statistical block')
+            row('Remote temperature (0x311B)', c(remote_temp))
         if soc is not None and soc != 0:
             row('State of charge (0x311A)', pct(soc))
         else:
@@ -408,11 +379,8 @@ def main():
             f'bits={chg_stage:02b}')
 
         # Controller
-        section('Controller  (0x3111–0x3112, 0x331E)')
+        section('Controller  (0x3111)')
         row('Internal temp (0x3111)',  c(ctrl_temp_3111))
-        row('Heatsink temp (0x3112)',  c(heatsink_temp_3112))
-        if ambient_temp is not None:
-            row('Ambient temp (0x331E)',   c(ambient_temp))
         if dis_ot is not None:
             ot_str = f"{R}YES — over temperature!{RS}" if dis_ot else f"{G}Normal{RS}"
             row('Over-temperature flag (0x2000)', ot_str)
@@ -422,31 +390,23 @@ def main():
         if sys_volt is not None:
             row('System rated voltage (0x311D)', f"{W}{sys_volt:.0f}{RS} V")
 
-        # Load — show both possible register positions
-        section('Load Output  (0x3200 bit, 0x3108 or 0x310C depending on model)')
-        row('Relay state (0x3202)',          f"{G}On{RS}" if load_state else f"{DM}Off{RS}")
-        row('Voltage at 0x3108',            v(load_v_108), '← Tracer-AN series')
-        row('Current at 0x3109',            a(load_a_109))
-        row('Power  at 0x310A',             w(load_w_10a))
-        row('Voltage at 0x310C',            v(load_v_10c), '← LS-B protocol map')
-        row('Current at 0x310D',            a(load_a_10d))
-        row('Power  at 0x310E',             w(load_w_10e))
+        # Load
+        section('Load Output')
+        row('Relay state (0x3202)',      f"{G}On{RS}" if load_state else f"{DM}Off{RS}")
+        row('Current at 0x310D',        a(load_a_driver), '← driver-confirmed register')
+        row('Voltage at 0x3108',        v(load_v_108),    '← may be load or unused')
+        row('Current at 0x3109',        a(load_a_109))
+        row('Power   at 0x310A',        w(load_w_10a))
+        row('Raw reg 0x310C',           f"{W}{reg_10c}{RS}", 'temp or alt load voltage')
         if load_mode is not None:
-            row('Control mode (0x903D)',     f"{W}{load_mode}{RS}")
-
-        # Net battery current
-        if net_batt_a is not None:
-            section('Net Battery Current  (0x331B–0x331C)')
-            direction = f"{G}Charging{RS}" if net_batt_a >= 0 else f"{Y}Discharging{RS}"
-            row('Net current', a(abs(net_batt_a)), f'({direction})')
+            row('Control mode (0x903D)', f"{W}{load_mode}{RS}")
 
         # Generated energy
-        section('Generated Energy  (PV → battery, 0x330C+)')
+        section('Generated Energy  (PV → battery, 0x330C–0x3313)')
         row('Today',      kwh(generated_today))
         row('This month', kwh(generated_month))
         row('This year',  kwh(generated_year))
         row('All time',   kwh(generated_total))
-        row('CO₂ saved',  f"{G}{co2_reduction:.2f}{RS} t")
 
         # Consumed energy
         section('Consumed Energy  (load output, 0x3304+)')
