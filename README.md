@@ -63,7 +63,6 @@ The driver is a Python 3 process that:
 | `/Dc/0/Voltage` | V | Battery voltage |
 | `/Dc/0/Current` | A | Battery charging current |
 | `/Dc/0/Temperature` | °C | Controller (internal) temperature |
-| `/Soc` | % | Battery state of charge (0x311A; `null` if not supported by model) |
 | `/Pv/V` | V | PV array voltage |
 | `/Yield/Power` | W | Instantaneous PV power |
 | `/Yield/User` | kWh | Total generated energy (lifetime) |
