@@ -206,6 +206,9 @@ do_install_update() {
 
     else  # update
 
+        OLD_VERSION=$(grep -m1 "^firmwareversion" "$DRIVER_DIR/driver/dbus-epever-tracer.py" \
+            | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
+
         echo ""
         echo "[1/5] Downloading driver..."
         download_and_extract "$GITHUB_DRIVER" "driver"
@@ -215,6 +218,9 @@ do_install_update() {
         echo "[2/5] Downloading Victron velib_python library..."
         download_and_extract "$GITHUB_VELIB" "velib_python"
         echo "      Done."
+
+        NEW_VERSION=$(grep -m1 "^firmwareversion" "dbus-epever-tracer-master/driver/dbus-epever-tracer.py" \
+            | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
 
         echo ""
         echo "[3/5] Installing files..."
@@ -257,7 +263,14 @@ do_install_update() {
 
     echo ""
     echo "================================================="
-    [ "$ACTION" = update ] && echo "  Update complete." || echo "  Installation complete."
+    if [ "$ACTION" = update ]; then
+        echo "  Update complete."
+        echo ""
+        echo "  Previous version : ${OLD_VERSION:-unknown}"
+        echo "  Installed version: ${NEW_VERSION:-unknown}"
+    else
+        echo "  Installation complete."
+    fi
     echo "================================================="
     echo ""
 }
