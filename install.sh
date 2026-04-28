@@ -22,6 +22,8 @@ opkg install python3-pip python3-serial
 echo "      Done."
 
 echo ""
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 echo "[2/6] Downloading driver..."
 cd /data
 wget -q --show-progress https://github.com/peterxxl/dbus-epever-tracer/archive/master.zip
@@ -41,6 +43,10 @@ echo "[4/6] Installing files..."
 mkdir -p dbus-epever-tracer/ext/velib_python
 cp -R dbus-epever-tracer-master/* dbus-epever-tracer
 cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
+if [ "$SCRIPT_DIR" != "/data/dbus-epever-tracer" ]; then
+    [ -f "$SCRIPT_DIR/update.sh" ]  && cp dbus-epever-tracer-master/update.sh  "$SCRIPT_DIR/update.sh"  && chmod +x "$SCRIPT_DIR/update.sh"
+    [ -f "$SCRIPT_DIR/install.sh" ] && cp dbus-epever-tracer-master/install.sh "$SCRIPT_DIR/install.sh" && chmod +x "$SCRIPT_DIR/install.sh"
+fi
 rm -r velib_python-master dbus-epever-tracer-master
 echo "      Done."
 
