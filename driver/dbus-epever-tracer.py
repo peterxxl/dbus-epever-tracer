@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-1549'
+firmwareversion = 'v2026.04.28-1600'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -468,9 +468,9 @@ class DbusEpever(object):
             self._dbusservice['/Load/State'] = c3200[2]
             
             # Registers 0x3312-0x3313: Total generated energy (kWh), divide by 100
-            # Combine two 16-bit registers into one 32-bit value
-            self._dbusservice['/Yield/User'] = (c3300[12] | c3300[13] << 16)/100
-            self._dbusservice['/Yield/System'] = (c3300[12] | c3300[13] << 16)/100
+            # c3300 starts at 0x3300, so 0x3312 = index 18, 0x3313 = index 19
+            self._dbusservice['/Yield/User'] = (c3300[18] | c3300[19] << 16)/100
+            self._dbusservice['/Yield/System'] = (c3300[18] | c3300[19] << 16)/100
             
             # Registers 0x330C-0x330D: Generated energy today (kWh × 100), cleared by the
             # controller at midnight.  Write only to today's slot; yesterday's yield is
