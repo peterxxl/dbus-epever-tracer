@@ -147,10 +147,10 @@ def main():
             result = instrument.read_registers(addr, count, fn_code)
             time.sleep(0.05)
             return result
-        except Exception as exc:
+        except Exception:
             instrument.serial.reset_input_buffer()
             time.sleep(0.1)
-            return None, str(exc)
+            return None
 
     errors = 0
     while True:
