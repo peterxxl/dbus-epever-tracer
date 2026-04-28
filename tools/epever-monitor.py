@@ -7,12 +7,13 @@ colour-coded real-time terminal UI. Useful for debugging and discovering
 values to implement in the driver.
 
 Usage:
-  python3 epever-monitor.py [port] [slave_addr] [interval_sec]
+  python3 epever-monitor.py [port] [slave_addr] [interval_sec] [--dump]
 
 Examples:
   python3 epever-monitor.py
   python3 epever-monitor.py /dev/ttyUSB0
   python3 epever-monitor.py /dev/ttyUSB0 1 2
+  python3 epever-monitor.py /dev/ttyUSB0 1 2 --dump   # raw dump to file + exit
 """
 
 import sys
@@ -27,9 +28,25 @@ import minimalmodbus
 
 # ─── CLI args ─────────────────────────────────────────────────────────────────
 
-PORT     = sys.argv[1] if len(sys.argv) > 1 else '/dev/ttyUSB0'
-SLAVE    = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-INTERVAL = float(sys.argv[3]) if len(sys.argv) > 3 else 2.0
+args     = [a for a in sys.argv[1:] if not a.startswith('--')]
+flags    = {a for a in sys.argv[1:] if a.startswith('--')}
+PORT     = args[0] if len(args) > 0 else '/dev/ttyUSB0'
+SLAVE    = int(args[1]) if len(args) > 1 else 1
+INTERVAL = float(args[2]) if len(args) > 2 else 2.0
+DUMP     = '--dump' in flags
+
+
+# ─── Tee: write to multiple streams at once ───────────────────────────────────
+
+class _Tee:
+    def __init__(self, *streams):
+        self.streams = streams
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+    def flush(self):
+        for s in self.streams:
+            s.flush()
 
 # ─── ANSI colours ─────────────────────────────────────────────────────────────
 
@@ -133,14 +150,25 @@ def main():
     instr.serial.bytesize = 8
     instr.serial.parity   = 'N'
     instr.serial.stopbits = 1
-    instr.serial.timeout  = 1
+    instr.serial.timeout  = 0.5   # short enough to not stall on exception responses
     instr.mode = minimalmodbus.MODE_RTU
     instr.debug = False
+
+    dump_file = None
+    if DUMP:
+        dump_filename = f"epever-dump-{time.strftime('%Y%m%d-%H%M%S')}.txt"
+        dump_file = open(dump_filename, 'w')
+        sys.stdout = _Tee(sys.__stdout__, dump_file)
+        instr.debug = True
+        print(f"# EPEVER Tracer raw dump — {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"# Port: {PORT}  Slave: {SLAVE}")
+        print()
 
     signal.signal(signal.SIGINT, lambda *_: (print(f"\n{RS}Bye.\n"), sys.exit(0)))
 
     errors = 0
     while True:
+        instr.serial.reset_input_buffer()   # clear any stale bytes from previous iteration
         read_errors = {}
 
         def safe_read(addr, count, fc, label=''):
@@ -198,7 +226,8 @@ def main():
 
         if rt is None or st is None or hist is None:
             errors += 1
-            clear_screen()
+            if not DUMP:
+                clear_screen()
             print(f"\n  {R}{BD}Cannot read core registers (attempt {errors}){RS}")
             for label, msg in read_errors.items():
                 print(f"  {Y}  {label}:{RS} {msg}")
@@ -330,7 +359,8 @@ def main():
             eq_dur = boost_dur = dchg_pct = chg_pct = mgmt_mode = None
 
         # ── Draw ─────────────────────────────────────────────────────────────
-        clear_screen()
+        if not DUMP:
+            clear_screen()
         now = time.strftime('%Y-%m-%d %H:%M:%S')
         print(f"\n  {BD}{W}EPEVER Tracer — Live Monitor{RS}   "
               f"{DM}{PORT}  slave={SLAVE}  host:{now}{RS}")
@@ -475,6 +505,12 @@ def main():
             row('Discharging stop %', f"{W}{dchg_pct:.0f}{RS} %", '0x906D')
         if chg_pct is not None:
             row('Charging depth %',   f"{W}{chg_pct:.0f}{RS} %", '0x906E')
+
+        if DUMP:
+            sys.stdout = sys.__stdout__
+            dump_file.close()
+            print(f"\nDump saved to: {dump_filename}")
+            return
 
         print(f"\n  {DM}Ctrl+C to exit • refreshes every {INTERVAL:.0f} s{RS}\n")
         time.sleep(INTERVAL)
