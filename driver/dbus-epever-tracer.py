@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-1601'
+firmwareversion = 'v2026.04.28-1610'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -616,6 +616,15 @@ def main():
     controller.serial.timeout = 0.2        # 200 ms timeout
     controller.mode = minimalmodbus.MODE_RTU  # Use RTU (binary) mode
     controller.clear_buffers_before_each_transaction = True  # Prevents stale data
+
+    # Flush any bytes left in the FT232R USB FIFO from a previous session.
+    # The USB chip can hold buffered data after the previous process closes the
+    # port; those bytes arrive with a small delay and corrupt the first read if
+    # not discarded.  Two flushes with a pause between them drain both the kernel
+    # buffer and any bytes still trickling out of the chip.
+    controller.serial.reset_input_buffer()
+    time.sleep(0.1)
+    controller.serial.reset_input_buffer()
 
     # Build the DBus service name from the port's basename (e.g. ttyUSB0)
     servicename = 'com.victronenergy.solarcharger.' + port.split('/')[-1]
