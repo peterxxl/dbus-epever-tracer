@@ -101,6 +101,7 @@ do_remove() {
         sed -i '/dbus-epever-tracer\/setup.sh/d' /data/rcS.local
     fi
     if [ -f /data/rc.local ]; then
+        sed -i '/dbus-epever-tracer\/setup.sh/d' /data/rc.local
         sed -i '/udevadm trigger --action=add --subsystem-match=tty/d' /data/rc.local
     fi
     echo "      Done."
