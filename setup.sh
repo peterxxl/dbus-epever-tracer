@@ -38,7 +38,7 @@ fi
 # our rule is last and overrides the default for this chip.
 UDEV_RULES=/etc/udev/rules.d/serial-starter.rules
 sed -i '/# Epever Tracer/d' "$UDEV_RULES"
-sed -i '/VE_SERVICE="epever"/d' "$UDEV_RULES"
+sed -i '/VE_SERVICE.*="epever"/d' "$UDEV_RULES"
 printf '\n# Epever Tracer: auto-start for Victron Energy USB RS485 cable (FT232R chipset)\nACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="FT232R_USB_UART", ENV{VE_SERVICE}="epever"\n' >> "$UDEV_RULES"
 udevadm control --reload-rules 2>/dev/null || true
 

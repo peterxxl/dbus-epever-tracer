@@ -94,7 +94,7 @@ do_remove() {
     echo "[4/5] Removing udev rule and boot hooks..."
     # Udev rule — remove the comment and the rule line we appended.
     sed -i '/# Epever Tracer/d' /etc/udev/rules.d/serial-starter.rules
-    sed -i '/VE_SERVICE="epever"/d' /etc/udev/rules.d/serial-starter.rules
+    sed -i '/VE_SERVICE.*="epever"/d' /etc/udev/rules.d/serial-starter.rules
     udevadm control --reload-rules 2>/dev/null || true
     # Boot hooks — remove only the lines this script added.
     if [ -f /data/rcS.local ]; then
