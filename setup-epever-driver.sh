@@ -134,13 +134,7 @@ do_remove() {
 do_install_update() {
     if [ "$ACTION" = install ]; then
         echo ""
-        echo "[1/6] Installing Python dependencies..."
-        opkg update
-        opkg install python3-serial
-        echo "      Done."
-
-        echo ""
-        echo "[2/6] Downloading driver..."
+        echo "[1/5] Downloading driver..."
         cd /data
         wget -q --show-progress "$GITHUB_DRIVER" -O master.zip
         unzip -q master.zip
@@ -148,14 +142,14 @@ do_install_update() {
         echo "      Done."
 
         echo ""
-        echo "[3/6] Downloading Victron velib_python library..."
+        echo "[2/5] Downloading Victron velib_python library..."
         wget -q --show-progress "$GITHUB_VELIB" -O master.zip
         unzip -q master.zip
         rm master.zip
         echo "      Done."
 
         echo ""
-        echo "[4/6] Installing files..."
+        echo "[3/5] Installing files..."
         mkdir -p dbus-epever-tracer/ext/velib_python
         cp -R dbus-epever-tracer-master/* dbus-epever-tracer
         cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
@@ -167,7 +161,7 @@ do_install_update() {
         echo "      Done."
 
         echo ""
-        echo "[5/6] Setting permissions..."
+        echo "[4/5] Setting permissions..."
         chmod +x /data/dbus-epever-tracer/setup-epever-driver.sh
         chmod +x /data/dbus-epever-tracer/setup.sh
         chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
@@ -177,7 +171,7 @@ do_install_update() {
         echo "      Done."
 
         echo ""
-        echo "[6/6] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
+        echo "[5/5] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
         bash /data/dbus-epever-tracer/setup.sh
         echo "      Done."
 
@@ -185,7 +179,7 @@ do_install_update() {
         echo "[+] Starting driver..."
         svc -t /service/serial-starter
         sleep 3
-        SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -1)
+        SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
         if [ -n "$SVC" ]; then
             echo "      Driver started: $SVC"
         else
@@ -238,7 +232,7 @@ do_install_update() {
 
         echo ""
         echo "[+] Restarting driver..."
-        SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -1)
+        SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
         if [ -n "$SVC" ]; then
             svc -t "/service/$SVC"
             echo "      Restarted: $SVC"

@@ -112,13 +112,12 @@ The script detects whether the driver is already installed and presents the appr
 
 **Install** will:
 
-1. Install `python3-serial` via `opkg`.
-2. Download this repository and Victron's `velib_python` library.
-3. Place files under `/data/dbus-epever-tracer/` (survives OS updates).
-4. Add an `epever` entry to `/etc/venus/serial-starter.conf`.
-5. Add a udev rule for the FT232R USB adapter.
-6. Create symlinks under `/opt/victronenergy/` and register boot hooks.
-7. Restart `serial-starter` so the driver starts immediately — no reboot needed.
+1. Download this repository and Victron's `velib_python` library.
+2. Place files under `/data/dbus-epever-tracer/` (survives OS updates).
+3. Add an `epever` entry to `/etc/venus/serial-starter.conf`.
+4. Add a udev rule for the FT232R USB adapter.
+5. Create symlinks under `/opt/victronenergy/` and register boot hooks.
+6. Restart `serial-starter` so the driver starts immediately — no reboot needed.
 
 **Update** downloads the latest release and restarts the driver in place.
 
