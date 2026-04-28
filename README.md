@@ -91,6 +91,7 @@ Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Fl
 - Venus OS v3.60 or later (tested up to v3.80)
 - Root SSH access to the Venus OS device
 - Internet access from the device during installation
+- `minimalmodbus` Python library (installed automatically by the setup script)
 
 ---
 
@@ -211,6 +212,37 @@ svc -u /service/dbus-epever-tracer.ttyUSB0
 
 ---
 
+## Clock Sync
+
+`tools/epever-update-clock.py` reads the controller's internal real-time clock, compares it to the system clock, and optionally sets it to the correct local time. The EPEVER Tracer has no NTP — its clock drifts over time and needs occasional manual correction.
+
+```sh
+python3 /data/dbus-epever-tracer/tools/epever-update-clock.py [port] [slave_addr]
+```
+
+The tool shows the drift before writing and asks for confirmation:
+
+```
+  Controller : 2026-04-28 08:01:33
+  System     : 2026-04-28 10:03:47   [+7334 s]
+
+  Set controller clock to system time? [y/N]
+```
+
+Drift colour: green under 60 s, yellow under 300 s, red 300 s or more.
+
+The tool reads the Venus OS timezone from DBus so the comparison uses true local time regardless of how the system timezone is configured.
+
+**Stop the driver before running** (same requirement as the monitor):
+
+```sh
+svc -d /service/dbus-epever-tracer.ttyUSB0
+python3 /data/dbus-epever-tracer/tools/epever-update-clock.py
+svc -u /service/dbus-epever-tracer.ttyUSB0
+```
+
+---
+
 ## File structure
 
 ```
@@ -222,7 +254,8 @@ dbus-epever-tracer/
 │   ├── run                          Daemontools service run script
 │   └── log/run                      Daemontools log run script
 ├── tools/
-│   └── epever-monitor.py            Live terminal monitor / raw dump tool
+│   ├── epever-monitor.py            Live terminal monitor / raw dump tool
+│   └── epever-update-clock.py       Sync controller RTC to system clock
 ├── epsolar_modbus_protocol_map.md   EPEVER register reference
 ├── setup-epever-driver.sh           Install / update / remove
 ├── setup.sh                         Post-update OS config (boot hooks, symlinks, udev)
