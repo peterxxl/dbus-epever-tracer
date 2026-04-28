@@ -13,7 +13,7 @@
 
 ## Tracer 3210A Compatibility Notes
 
-Verified by raw Modbus dump (`--dump` mode) against a **Tracer 3210A** running firmware `v1.04`, connected at 115200 bps over USB RS-485.  Registers marked ⛔ return Modbus exception 02 (Illegal Data Address); registers marked ⚠️ require special handling.
+Verified by raw Modbus dump (`--dump` mode) against a **Tracer 3210A** connected at 115200 bps over USB RS-485.  Registers marked ⛔ return Modbus exception 02 (Illegal Data Address); registers marked ⚠️ require special handling.
 
 ### Read block limits
 
