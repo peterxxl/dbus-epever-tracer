@@ -91,7 +91,7 @@ Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Fl
 - Venus OS v3.60 or later (tested up to v3.80)
 - Root SSH access to the Venus OS device
 - Internet access from the device during installation
-- `minimalmodbus` Python library (installed automatically by the setup script)
+- `minimalmodbus` Python library (bundled — no separate install needed)
 
 ---
 
