@@ -359,11 +359,25 @@ def main():
         # ── Draw ─────────────────────────────────────────────────────────────
         if not DUMP:
             clear_screen()
-        now = time.strftime('%Y-%m-%d %H:%M:%S')
+        now_ts  = time.time()
+        now_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now_ts))
         print(f"\n  {BD}{W}EPEVER Tracer — Live Monitor{RS}   "
-              f"{DM}{PORT}  slave={SLAVE}  host:{now}{RS}")
+              f"{DM}{PORT}  slave={SLAVE}{RS}")
+        print(f"  {'═' * 58}")
         if clock_str:
-            print(f"  {DM}Controller clock: {clock_str}{RS}")
+            try:
+                ct        = time.strptime(clock_str, '%Y-%m-%d %H:%M:%S')
+                drift     = int(now_ts - time.mktime(ct))
+                drift_abs = abs(drift)
+                sign      = '+' if drift >= 0 else '-'
+                dc        = G if drift_abs < 60 else (Y if drift_abs < 300 else R)
+                drift_str = f"{dc}{sign}{drift_abs} s{RS}"
+            except Exception:
+                drift_str = f"{DM}?{RS}"
+            print(f"  {DM}Controller : {RS}{clock_str}")
+            print(f"  {DM}System     : {RS}{now_str}   [{drift_str}{DM}]{RS}")
+        else:
+            print(f"  {DM}System     : {now_str}{RS}")
         print(f"  {'═' * 58}")
 
         # PV array
