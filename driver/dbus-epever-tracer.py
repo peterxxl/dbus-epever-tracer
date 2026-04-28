@@ -70,7 +70,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-1802'
+firmwareversion = 'v2026.04.28-2126'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -208,16 +208,10 @@ class DbusEpever(object):
         
         # Day tracking for resetting daily counters
         self._last_day = datetime.now().day
-        
-        # Yesterday's data cache
-        self._yesterday_yield = 0.0
-        self._yesterday_max_power = 0
-        self._yesterday_max_pv_voltage = 0
-        self._yesterday_min_battery_voltage = 0
-        self._yesterday_max_battery_voltage = 0
-        self._yesterday_time_in_bulk = 0.0
-        self._yesterday_time_in_absorption = 0.0
-        self._yesterday_time_in_float = 0.0
+
+        # Rolling daily history: list of dicts, index 0 = yesterday, max 30 entries.
+        # Populated from the state file at startup; prepended to at midnight.
+        self._history = []
 
         # State file path — written after each successful update so daily
         # accumulators survive a driver restart within the same calendar day.
@@ -267,55 +261,41 @@ class DbusEpever(object):
         self._dbusservice.add_path('/WarningCode', 0)
 
         # Historical statistics (overall and daily)
-        self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)        # Max PV voltage seen
-        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 999, gettextcallback=_v) # Min battery voltage seen (999 = unseen sentinel)
-        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 0, gettextcallback=_v)   # Max battery voltage seen
-        self._dbusservice.add_path('/History/Overall/DaysAvailable', 2)                           # Number of days data available
-        self._dbusservice.add_path('/History/Overall/LastError1', 0) 
+        self._dbusservice.add_path('/History/Overall/MaxPvVoltage', 0, gettextcallback=_v)
+        self._dbusservice.add_path('/History/Overall/MinBatteryVoltage', 999, gettextcallback=_v)
+        self._dbusservice.add_path('/History/Overall/MaxBatteryVoltage', 0, gettextcallback=_v)
+        self._dbusservice.add_path('/History/Overall/DaysAvailable', 31)
+        self._dbusservice.add_path('/History/Overall/LastError1', 0)
 
-        # Today's statistics (Daily/0)
-        self._dbusservice.add_path('/History/Daily/0/Yield', 0.0)                                 # Today's yield (kWh)
-        self._dbusservice.add_path('/History/Daily/0/MaxPower',0)                                 # Max power today (W)
-        self._dbusservice.add_path('/History/Daily/0/MaxPvVoltage', 0)                            # Max PV voltage today (V)
-        self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 999)                    # Min battery voltage today (V) (999 = unseen sentinel)
-        self._dbusservice.add_path('/History/Daily/0/MaxBatteryVoltage', 0)                       # Max battery voltage today (V)
-        self._dbusservice.add_path('/History/Daily/0/MaxBatteryCurrent', 0)                       # Max battery current today (A)
-        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0)                              # Time in bulk charge phase (min)
-        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorption', 0)                        # Time in absorption (min)
-        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 0)                             # Time in float (min)
-        self._dbusservice.add_path('/History/Daily/0/LastError1', 0)                              # Last error today
-       
-        # Yesterday's statistics (Daily/1)
-        self._dbusservice.add_path('/History/Daily/1/Yield', 0.0)                                 # Yesterday's yield (kWh)
-        self._dbusservice.add_path('/History/Daily/1/MaxPower',0)                                 # Max power yesterday (W)
-        self._dbusservice.add_path('/History/Daily/1/MaxPvVoltage', 0)                            # Max PV voltage yesterday (V)
-        self._dbusservice.add_path('/History/Daily/1/MinBatteryVoltage', 0)                     # Min battery voltage yesterday (V)
-        self._dbusservice.add_path('/History/Daily/1/MaxBatteryVoltage', 0)                       # Max battery voltage yesterday (V)
-        self._dbusservice.add_path('/History/Daily/1/TimeInBulk', 0)                              # Time in bulk charge phase yesterday (min)
-        self._dbusservice.add_path('/History/Daily/1/TimeInAbsorption', 0)                        # Time in absorption yesterday (min)
-        self._dbusservice.add_path('/History/Daily/1/TimeInFloat', 0)                             # Time in float yesterday (min)
-        self._dbusservice.add_path('/History/Daily/1/LastError1', 0)                              # Last error yesterday
+        # Today's statistics (Daily/0) — live values updated every tick
+        self._dbusservice.add_path('/History/Daily/0/Yield', 0.0)
+        self._dbusservice.add_path('/History/Daily/0/MaxPower', 0)
+        self._dbusservice.add_path('/History/Daily/0/MaxPvVoltage', 0)
+        self._dbusservice.add_path('/History/Daily/0/MinBatteryVoltage', 0)
+        self._dbusservice.add_path('/History/Daily/0/MaxBatteryVoltage', 0)
+        self._dbusservice.add_path('/History/Daily/0/MaxBatteryCurrent', 0)
+        self._dbusservice.add_path('/History/Daily/0/TimeInBulk', 0)
+        self._dbusservice.add_path('/History/Daily/0/TimeInAbsorption', 0)
+        self._dbusservice.add_path('/History/Daily/0/TimeInFloat', 0)
+        self._dbusservice.add_path('/History/Daily/0/LastError1', 0)
+
+        # Historical days Daily/1 (yesterday) through Daily/30 — loaded from history list
+        for _day in range(1, 31):
+            self._dbusservice.add_path(f'/History/Daily/{_day}/Yield', 0.0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/MaxPower', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/MaxPvVoltage', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/MinBatteryVoltage', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/MaxBatteryVoltage', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/MaxBatteryCurrent', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/TimeInBulk', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/TimeInAbsorption', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/TimeInFloat', 0)
+            self._dbusservice.add_path(f'/History/Daily/{_day}/LastError1', 0)
    
-        # Restore persisted daily max/min values into the DBus paths so VRM
-        # sees correct numbers immediately after a restart within the same day.
-        try:
-            with open(self._state_file, 'r') as f:
-                s = json.load(f)
-            if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
-                self._dbusservice['/History/Daily/0/MaxPower'] = s.get('daily_max_power', 0)
-                self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = s.get('daily_max_battery_current', 0)
-                # MaxPvVoltage, MinBatteryVoltage, MaxBatteryVoltage are read from
-                # controller registers on every update — no restore needed.
-                self._dbusservice['/History/Daily/1/Yield'] = self._yesterday_yield
-                self._dbusservice['/History/Daily/1/MaxPower'] = self._yesterday_max_power
-                self._dbusservice['/History/Daily/1/MaxPvVoltage'] = self._yesterday_max_pv_voltage
-                self._dbusservice['/History/Daily/1/MinBatteryVoltage'] = self._yesterday_min_battery_voltage
-                self._dbusservice['/History/Daily/1/MaxBatteryVoltage'] = self._yesterday_max_battery_voltage
-                self._dbusservice['/History/Daily/1/TimeInBulk'] = round(self._yesterday_time_in_bulk, 0)
-                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = round(self._yesterday_time_in_absorption, 0)
-                self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 0)
-        except (FileNotFoundError, Exception):
-            pass
+        # Restore today's in-memory max values and historical days from state file.
+        self._dbusservice['/History/Daily/0/MaxPower'] = self._restored_daily_max_power
+        self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = self._restored_daily_max_battery_current
+        self._publish_history()
 
         # Schedule periodic data updates every 1000 ms (1 second)
         GLib.timeout_add(1000, self._update)
@@ -414,43 +394,35 @@ class DbusEpever(object):
             elif self._current_charge_state == 5:  # Float
                 self._time_in_float += time_diff_minutes
 
-            # Check for day transition and reset counters if needed
+            # Check for day transition
             current_day = datetime.now().day
             if current_day != self._last_day:
-                # Day has changed - move today's data to yesterday's before resetting
-                logging.info("New day detected, resetting daily counters and saving yesterday's data")
-                
-                # Save today's accumulated values as yesterday's values
-                # For yield, we use the current day's value since yesterday's yield is not available in Epever registers
-                self._yesterday_yield = self._dbusservice['/History/Daily/0/Yield']
-                self._yesterday_max_power = self._dbusservice['/History/Daily/0/MaxPower']
-                self._yesterday_max_pv_voltage = self._dbusservice['/History/Daily/0/MaxPvVoltage']
-                self._yesterday_min_battery_voltage = self._dbusservice['/History/Daily/0/MinBatteryVoltage']
-                self._yesterday_max_battery_voltage = self._dbusservice['/History/Daily/0/MaxBatteryVoltage']
-                self._yesterday_time_in_bulk = self._time_in_bulk
-                self._yesterday_time_in_absorption = self._time_in_absorption
-                self._yesterday_time_in_float = self._time_in_float
-                
-                # Update yesterday's paths
-                self._dbusservice['/History/Daily/1/Yield'] = self._yesterday_yield
-                self._dbusservice['/History/Daily/1/MaxPower'] = self._yesterday_max_power
-                self._dbusservice['/History/Daily/1/MaxPvVoltage'] = self._yesterday_max_pv_voltage
-                self._dbusservice['/History/Daily/1/MinBatteryVoltage'] = self._yesterday_min_battery_voltage
-                self._dbusservice['/History/Daily/1/MaxBatteryVoltage'] = self._yesterday_max_battery_voltage
-                self._dbusservice['/History/Daily/1/TimeInBulk'] = round(self._yesterday_time_in_bulk, 0)
-                self._dbusservice['/History/Daily/1/TimeInAbsorption'] = round(self._yesterday_time_in_absorption, 0)
-                self._dbusservice['/History/Daily/1/TimeInFloat'] = round(self._yesterday_time_in_float, 0)
-                
-                # Reset today's counters (only the ones not backed by controller registers)
+                logging.info("New day detected — snapshotting today into history and resetting counters.")
+
+                snapshot = {
+                    'date':                datetime.now().strftime('%Y-%m-%d'),
+                    'yield':               self._dbusservice['/History/Daily/0/Yield'],
+                    'max_power':           self._dbusservice['/History/Daily/0/MaxPower'],
+                    'max_pv_voltage':      self._dbusservice['/History/Daily/0/MaxPvVoltage'],
+                    'min_battery_voltage': self._dbusservice['/History/Daily/0/MinBatteryVoltage'],
+                    'max_battery_voltage': self._dbusservice['/History/Daily/0/MaxBatteryVoltage'],
+                    'max_battery_current': self._dbusservice['/History/Daily/0/MaxBatteryCurrent'],
+                    'time_in_bulk':        round(self._time_in_bulk, 0),
+                    'time_in_absorption':  round(self._time_in_absorption, 0),
+                    'time_in_float':       round(self._time_in_float, 0),
+                    'last_error':          self._dbusservice['/History/Daily/0/LastError1'],
+                }
+                self._history.insert(0, snapshot)
+                self._history = self._history[:30]
+                self._publish_history()
+
+                # Reset today's counters (voltage min/max reset by controller at midnight)
                 self._time_in_bulk = 0.0
                 self._time_in_absorption = 0.0
                 self._time_in_float = 0.0
                 self._dbusservice['/History/Daily/0/MaxPower'] = 0
                 self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = 0
-                # MaxPvVoltage, MinBatteryVoltage, MaxBatteryVoltage are read from
-                # controller registers and reset by the controller at midnight.
-                
-                # Update day tracking
+
                 self._last_day = current_day
             
             # Update the DBus paths with accumulated times for today (rounded to 1 decimal place)
@@ -515,48 +487,54 @@ class DbusEpever(object):
     # State persistence helpers
     # ------------------------------------------------------------------
 
+    def _publish_history(self):
+        """Write self._history to DBus paths Daily/1 through Daily/30."""
+        for i, entry in enumerate(self._history):
+            day = i + 1
+            self._dbusservice[f'/History/Daily/{day}/Yield']               = entry.get('yield', 0.0)
+            self._dbusservice[f'/History/Daily/{day}/MaxPower']            = entry.get('max_power', 0)
+            self._dbusservice[f'/History/Daily/{day}/MaxPvVoltage']        = entry.get('max_pv_voltage', 0)
+            self._dbusservice[f'/History/Daily/{day}/MinBatteryVoltage']   = entry.get('min_battery_voltage', 0)
+            self._dbusservice[f'/History/Daily/{day}/MaxBatteryVoltage']   = entry.get('max_battery_voltage', 0)
+            self._dbusservice[f'/History/Daily/{day}/MaxBatteryCurrent']   = entry.get('max_battery_current', 0)
+            self._dbusservice[f'/History/Daily/{day}/TimeInBulk']          = entry.get('time_in_bulk', 0)
+            self._dbusservice[f'/History/Daily/{day}/TimeInAbsorption']    = entry.get('time_in_absorption', 0)
+            self._dbusservice[f'/History/Daily/{day}/TimeInFloat']         = entry.get('time_in_float', 0)
+            self._dbusservice[f'/History/Daily/{day}/LastError1']          = entry.get('last_error', 0)
+
     def _load_state(self):
-        """Restore daily accumulators from the state file if date matches today."""
+        """Restore accumulators and history from the state file."""
+        self._restored_daily_max_power = 0
+        self._restored_daily_max_battery_current = 0
         try:
             with open(self._state_file, 'r') as f:
                 s = json.load(f)
-            if s.get('date') != datetime.now().strftime('%Y-%m-%d'):
-                logging.info("State file is from a previous day — starting fresh.")
-                return
-            self._time_in_bulk = s.get('time_in_bulk', 0.0)
-            self._time_in_absorption = s.get('time_in_absorption', 0.0)
-            self._time_in_float = s.get('time_in_float', 0.0)
-            self._yesterday_yield = s.get('yesterday_yield', 0.0)
-            self._yesterday_max_power = s.get('yesterday_max_power', 0)
-            self._yesterday_max_pv_voltage = s.get('yesterday_max_pv_voltage', 0)
-            self._yesterday_min_battery_voltage = s.get('yesterday_min_battery_voltage', 0)
-            self._yesterday_max_battery_voltage = s.get('yesterday_max_battery_voltage', 0)
-            self._yesterday_time_in_bulk = s.get('yesterday_time_in_bulk', 0.0)
-            self._yesterday_time_in_absorption = s.get('yesterday_time_in_absorption', 0.0)
-            self._yesterday_time_in_float = s.get('yesterday_time_in_float', 0.0)
-            logging.info("Restored daily accumulators from state file.")
+            # History is always loaded regardless of date so past days are available.
+            self._history = s.get('history', [])[:30]
+            if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                self._time_in_bulk    = s.get('time_in_bulk', 0.0)
+                self._time_in_absorption = s.get('time_in_absorption', 0.0)
+                self._time_in_float   = s.get('time_in_float', 0.0)
+                self._restored_daily_max_power            = s.get('daily_max_power', 0)
+                self._restored_daily_max_battery_current  = s.get('daily_max_battery_current', 0)
+                logging.info("Restored daily accumulators and history from state file.")
+            else:
+                logging.info("State file is from a previous day — history loaded, accumulators start fresh.")
         except FileNotFoundError:
             pass  # First run — no state file yet
         except Exception as e:
             logging.warning("Could not load state file: %s", e)
 
     def _save_state(self):
-        """Persist daily accumulators to the state file atomically."""
+        """Persist accumulators and history to the state file atomically."""
         s = {
-            'date': datetime.now().strftime('%Y-%m-%d'),
-            'time_in_bulk': self._time_in_bulk,
-            'time_in_absorption': self._time_in_absorption,
-            'time_in_float': self._time_in_float,
-            'daily_max_power': self._dbusservice['/History/Daily/0/MaxPower'],
+            'date':                     datetime.now().strftime('%Y-%m-%d'),
+            'time_in_bulk':             self._time_in_bulk,
+            'time_in_absorption':       self._time_in_absorption,
+            'time_in_float':            self._time_in_float,
+            'daily_max_power':          self._dbusservice['/History/Daily/0/MaxPower'],
             'daily_max_battery_current': self._dbusservice['/History/Daily/0/MaxBatteryCurrent'],
-            'yesterday_yield': self._yesterday_yield,
-            'yesterday_max_power': self._yesterday_max_power,
-            'yesterday_max_pv_voltage': self._yesterday_max_pv_voltage,
-            'yesterday_min_battery_voltage': self._yesterday_min_battery_voltage,
-            'yesterday_max_battery_voltage': self._yesterday_max_battery_voltage,
-            'yesterday_time_in_bulk': self._yesterday_time_in_bulk,
-            'yesterday_time_in_absorption': self._yesterday_time_in_absorption,
-            'yesterday_time_in_float': self._yesterday_time_in_float,
+            'history':                  self._history,
         }
         tmp = self._state_file + '.tmp'
         try:
