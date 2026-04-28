@@ -9,6 +9,54 @@
 3. Register addresses are in hexadecimal format.
 4. For 32-bit data (e.g., power), the L and H registers represent the low and high 16-bit values, respectively. For example, a charging input rated power of 3000 W (multiplied by 100) results in register 0x3002 holding 0x93F0 and register 0x3003 holding 0x0004.
 
+---
+
+## Tracer 3210A Compatibility Notes
+
+Verified by raw Modbus dump (`--dump` mode) against a **Tracer 3210A** running firmware `v1.04`, connected at 115200 bps over USB RS-485.  Registers marked ⛔ return Modbus exception 02 (Illegal Data Address); registers marked ⚠️ require special handling.
+
+### Read block limits
+
+| Block | Protocol spec count | **Tracer 3210A max count** | Notes |
+|-------|--------------------|-----------------------------|-------|
+| Rated data (FC04, 0x3000) | 15 | **0 — entire block unsupported** | Every attempt returns exception 02 immediately |
+| Real-time data (FC04, 0x3100) | 24 | **18** (0x3100–0x3111) | Requesting >18 returns exception 02 |
+| Statistical data (FC04, 0x3300) | 32 | **20** (0x3300–0x3313) | Requesting >20 returns exception 02 |
+| Status (FC04, 0x3200) | 3 | **3** | Works correctly |
+| Charging parameters (FC03, 0x9000) | 15 | **15** | Works correctly |
+| All other FC03 blocks | — | Works as documented | |
+
+### Registers confirmed unsupported on Tracer 3210A
+
+| Address | Name | Reason |
+|---------|------|--------|
+| 0x3000–0x300E | Entire rated data block | Exception 02 on any FC04 read starting at 0x3000 |
+| 0x3112 | Power component temperature | Beyond the 18-register real-time limit (would require count ≥ 19) |
+| 0x3314–0x3315 | CO₂ reduction | Beyond the 20-register statistics limit |
+| 0x331B–0x331C | Net battery current | Same — beyond statistics block |
+| 0x331D | Battery temperature (stats) | Same |
+| 0x331E | Ambient temperature | Same |
+
+### Registers confirmed working on Tracer 3210A (individually)
+
+| Address | Name | Observed value (dump) |
+|---------|------|-----------------------|
+| 0x311A | Battery SOC | 23–24 % |
+| 0x311B | Remote battery temperature | 25.00 °C |
+| 0x311D | System rated voltage | 24.00 V |
+
+> **Note:** 0x311A–0x311D must be read one register at a time.  Reading them as a 4-register block causes an exception for any unsupported address in the range, which corrupts the serial buffer and breaks subsequent reads.
+
+### Load current register
+
+The LS-B protocol map lists load current at **0x3109** (within the 0x3108–0x310B block).  On the Tracer 3210A the driver reads load current from **0x310D** (index 13 from base 0x3100) and this matches VRM output.  The registers at 0x3108–0x310B appear to hold different data on this model — display both and compare against your load output to identify which is correct for your hardware.
+
+### Timing
+
+The 45-byte statistics response (0x3300 × 20) is sent in two bursts with a mid-frame pause while the controller reads from internal memory.  A serial timeout of at least **500 ms** is required to receive the complete frame; 200 ms causes ~15 % truncation failures.
+
+---
+
 ## Rated Data (Read-Only) Input Registers
 
 | Variable Name | Address | Description | Unit | Scale |
