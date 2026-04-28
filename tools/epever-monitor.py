@@ -145,24 +145,26 @@ def main():
 
         def safe_read(addr, count, fc, label=''):
             try:
+                instr.serial.reset_input_buffer()
                 result = instr.read_registers(addr, count, fc)
                 time.sleep(0.05)
                 return result
             except Exception as exc:
                 instr.serial.reset_input_buffer()
-                time.sleep(0.1)
+                time.sleep(0.15)
                 key = label or f'0x{addr:04X}'
                 read_errors[key] = str(exc)
                 return None
 
         def safe_bit(addr, fc, label=''):
             try:
+                instr.serial.reset_input_buffer()
                 result = instr.read_bit(addr, fc)
                 time.sleep(0.05)
                 return result
             except Exception as exc:
                 instr.serial.reset_input_buffer()
-                time.sleep(0.1)
+                time.sleep(0.15)
                 key = label or f'0x{addr:04X}'
                 read_errors[key] = str(exc)
                 return None
@@ -174,7 +176,12 @@ def main():
         # positions (0x3108 used by Tracer-AN, 0x310C per LS-B protocol map)
         rt      = safe_read(0x3100, 24, 4, 'real-time (0x3100)')
         # ── Extended real-time: SOC, remote temp, system voltage (FC04) ──────
-        rt_ext  = safe_read(0x311A, 4, 4, 'rt-ext (0x311A)')  # 0x311A–0x311D
+        # 0x311A returns Modbus exception 02 (Illegal Data Address) on Tracer-AN;
+        # read one register at a time so a single unsupported address doesn't
+        # corrupt the entire block.
+        rt_ext_soc  = safe_read(0x311A, 1, 4, 'soc (0x311A)')
+        rt_ext_rtemp = safe_read(0x311B, 1, 4, 'remote-temp (0x311B)')
+        rt_ext_sysvolt = safe_read(0x311D, 1, 4, 'sys-volt (0x311D)')
         # ── Status (FC04) ─────────────────────────────────────────────────────
         st      = safe_read(0x3200, 3, 4, 'status (0x3200)')
         # ── Statistics (FC04) — extended to cover consumed energy + net current
@@ -223,9 +230,9 @@ def main():
         heatsink_temp_3112 = signed16(rt[18]) / 100  # 0x3112 power component temp
 
         # ── Parse extended real-time ──────────────────────────────────────────
-        soc          = rt_ext[0] if rt_ext else None  # 0x311A
-        remote_temp  = (signed16(rt_ext[1]) / 100) if rt_ext else None  # 0x311B
-        sys_volt     = (rt_ext[3] / 100) if rt_ext else None  # 0x311D
+        soc         = rt_ext_soc[0]              if rt_ext_soc    else None  # 0x311A
+        remote_temp = signed16(rt_ext_rtemp[0]) / 100 if rt_ext_rtemp else None  # 0x311B
+        sys_volt    = rt_ext_sysvolt[0] / 100    if rt_ext_sysvolt else None  # 0x311D
 
         # ── Parse status ──────────────────────────────────────────────────────
         batt_status = st[0]
