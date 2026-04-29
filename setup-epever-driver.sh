@@ -20,7 +20,9 @@ echo ""
 # ─── Menu ─────────────────────────────────────────────────────────────────────
 
 if is_installed; then
-    echo "Status: installed"
+    CURRENT_VERSION=$(grep -m1 "^firmwareversion" "$DRIVER_DIR/driver/dbus-epever-tracer.py" \
+        | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
+    echo "Status: installed (${CURRENT_VERSION:-unknown})"
     echo ""
     echo "  1) Update to latest version"
     echo "  2) Remove from system"
