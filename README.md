@@ -2,7 +2,7 @@
 
 **A Venus OS driver for EPEVER Tracer MPPT Solar Charge Controllers**
 
-Bridges an EPEVER Tracer controller to Victron's Venus OS ecosystem over Modbus RTU (RS-485), exposing real-time and historical data on DBus so VRM and all other Victron tools can see the charger exactly like a native Victron MPPT.
+Bridges an EPEVER Tracer controller to Victron's Venus OS ecosystem over Modbus RTU (RS-485), exposing real-time and historical data on DBus so the Venus OS device and all Victron tools can see the charger exactly like a native Victron MPPT.
 
 ---
 
@@ -28,9 +28,10 @@ USB RS-485 adapter (/dev/ttyUSBx)
      │
 dbus-epever-tracer.py   ← this driver
      │  DBus  com.victronenergy.solarcharger.ttyUSBx
-Venus OS
+Venus OS device (Cerbo GX, etc.)
+     │  GX display / Modbus-TCP gateway / Node-RED / …
      │
-VRM / GX display / Modbus-TCP gateway / …
+VRM portal (remote monitoring, via internet)
 ```
 
 The driver is a Python 3 process that:
@@ -38,7 +39,7 @@ The driver is a Python 3 process that:
 1. Opens the RS-485 serial port at startup (port passed as a CLI argument by `serial-starter`).
 2. Reads four blocks of Modbus holding registers once per second.
 3. Converts raw register values to SI units and maps EPEVER states/errors to Victron equivalents.
-4. Publishes everything on a `com.victronenergy.solarcharger` DBus service, which Venus OS picks up automatically.
+4. Publishes everything on a `com.victronenergy.solarcharger` DBus service, which the Venus OS device picks up automatically.
 
 ---
 
@@ -139,16 +140,16 @@ Open `driver/dbus-epever-tracer.py` and edit the constants near the top of the f
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `serialnumber` | `'WO20160415-008-0056'` | Device serial shown in VRM |
-| `productname` | `'Epever Tracer MPPT'` | Product name shown in VRM |
+| `serialnumber` | `'WO20160415-008-0056'` | Device serial shown on the Venus OS device and in the VRM portal |
+| `productname` | `'Epever Tracer MPPT'` | Product name shown on the Venus OS device |
 | `firmwareversion` | _(auto-stamped)_ | Set to `vYYYY.MM.DD-HHMM` by the pre-commit hook on every commit |
-| `deviceinstance` | `278` | VRM device instance number |
+| `deviceinstance` | `278` | Device instance number — must be unique among all devices on the same Venus OS installation |
 
 ---
 
 ## Troubleshooting
 
-**No data on VRM**
+**No data on the Venus OS device or VRM portal**
 - Confirm the driver process is running: `ps aux | grep dbus-epever-tracer`
 - Check that the serial adapter is visible: `ls /dev/ttyUSB*`
 - Read the service log: `cat /var/log/dbus-epever-tracer.ttyUSB0/current`
@@ -166,17 +167,21 @@ svc -t /service/dbus-epever-tracer.ttyUSB0
 
 ---
 
-## Live Monitor
+## Tools
 
-`tools/epever-monitor.py` is a standalone diagnostic tool that reads every available Modbus register block and displays them in a colour-coded terminal UI. Use it to verify readings, debug communication issues, or capture raw Modbus frames for analysis.
-
-**The driver and the monitor cannot share the serial port.** Stop the driver before running the monitor:
+All three tools require the driver to be stopped first — they cannot share the serial port with the running driver:
 
 ```sh
-svc -d /service/dbus-epever-tracer.ttyUSB0
+svc -d /service/dbus-epever-tracer.ttyUSB0   # stop
+# run tool
+svc -u /service/dbus-epever-tracer.ttyUSB0   # resume
 ```
 
-Run the monitor:
+---
+
+## Live Monitor
+
+`tools/epever-monitor.py` reads every available Modbus register block and displays them in a colour-coded terminal UI. Use it to verify readings, debug communication issues, or capture raw Modbus frames for analysis.
 
 ```sh
 python3 /data/dbus-epever-tracer/tools/epever-monitor.py [port] [slave] [interval] [--dump]
@@ -204,10 +209,44 @@ python3 /data/dbus-epever-tracer/tools/epever-monitor.py /dev/ttyUSB0 1 2 --dump
 
 The display shows: PV voltage / current / power, battery voltage / current / charging power, load current and state, charging state, battery SOC and temperature, controller temperature, today's and yesterday's statistics (generated energy, max/min voltages, max power), lifetime totals, charging parameters, and the controller's real-time clock.
 
-Resume the driver when done:
+---
+
+## Controller Configuration
+
+`tools/epever-config.py` lets you read and change all writable controller parameters interactively. It displays current values alongside allowed ranges or options, and reads the register back after each write to confirm the controller accepted the change.
 
 ```sh
-svc -u /service/dbus-epever-tracer.ttyUSB0
+python3 /data/dbus-epever-tracer/tools/epever-config.py [port] [slave_addr]
+```
+
+Parameters covered:
+
+- Battery type, capacity, rated voltage, and management mode
+- All charging voltage thresholds (HVD, charging limit, equalization, boost, float, reconnect, LVD, etc.)
+- Temperature compensation and temperature protection limits
+- Boost and equalization duration and cycle
+- Sun detection thresholds (NTTV / DTTV) and delays
+- Load control mode and default load state
+
+Example session:
+
+```
+  EPEVER Tracer Configuration  port /dev/ttyUSB0  slave 1
+
+    #  Parameter                          Current value      Allowed range / options
+    ──────────────────────────────────────────────────────────────────────────────
+    1.  Battery type                       Sealed             0=User defined  |  1=Sealed  |  2=GEL  |  3=Flooded
+    2.  Battery capacity                   200 Ah             1 – 9999 Ah
+    9.  Boost / absorption voltage         28.80 V            9.0 – 32.0 V
+   ...
+
+  Enter parameter number to edit, r to refresh, or q to quit:
+```
+
+After entering a new value and confirming, the tool writes it to the controller and reports whether the value was accepted:
+
+```
+  Writing… OK  controller confirmed 29.00 V
 ```
 
 ---
@@ -233,14 +272,6 @@ Drift colour: green under 60 s, yellow under 300 s, red 300 s or more.
 
 The tool reads the Venus OS timezone from DBus so the comparison uses true local time regardless of how the system timezone is configured.
 
-**Stop the driver before running** (same requirement as the monitor):
-
-```sh
-svc -d /service/dbus-epever-tracer.ttyUSB0
-python3 /data/dbus-epever-tracer/tools/epever-update-clock.py
-svc -u /service/dbus-epever-tracer.ttyUSB0
-```
-
 ---
 
 ## File structure
@@ -255,6 +286,7 @@ dbus-epever-tracer/
 │   └── log/run                      Daemontools log run script
 ├── tools/
 │   ├── epever-monitor.py            Live terminal monitor / raw dump tool
+│   ├── epever-config.py             Interactive controller configuration tool
 │   └── epever-update-clock.py       Sync controller RTC to system clock
 ├── epsolar_modbus_protocol_map.md   EPEVER register reference
 ├── setup-epever-driver.sh           Install / update / remove
