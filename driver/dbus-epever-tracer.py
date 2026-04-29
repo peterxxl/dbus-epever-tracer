@@ -90,7 +90,7 @@ productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
 
-firmwareversion = 'v2026.04.29-1333'
+firmwareversion = 'v2026.04.29-1339'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -323,8 +323,10 @@ class DbusEpever(object):
         self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = self._restored_daily_max_battery_current
         self._publish_history()
 
-        # Temperature service — separate DBus service for the controller sensor
-        self._tempservice = VeDbusService(tempservicename)
+        # Temperature service — separate DBus service for the controller sensor.
+        # Needs its own private bus connection; sharing one connection only allows
+        # a single root '/' object-path registration and would raise a KeyError.
+        self._tempservice = VeDbusService(tempservicename, bus=dbus.SystemBus(private=True))
         self._tempservice.add_path('/Mgmt/ProcessName', __file__)
         self._tempservice.add_path('/Mgmt/Connection', connection)
         self._tempservice.add_path('/DeviceInstance', temperature_deviceinstance)
