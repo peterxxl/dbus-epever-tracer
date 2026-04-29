@@ -209,13 +209,24 @@ do_install_update() {
         OLD_VERSION=$(grep -m1 "^firmwareversion" "$DRIVER_DIR/driver/dbus-epever-tracer.py" \
             | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
 
+        SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
+
         echo ""
-        echo "[1/5] Downloading driver..."
+        echo "[1/5] Stopping driver..."
+        if [ -n "$SVC" ]; then
+            svc -d "/service/$SVC"
+            echo "      Stopped: $SVC"
+        else
+            echo "      No running service found — continuing."
+        fi
+
+        echo ""
+        echo "[2/5] Downloading driver..."
         download_and_extract "$GITHUB_DRIVER" "driver"
         echo "      Done."
 
         echo ""
-        echo "[2/5] Downloading Victron velib_python library..."
+        echo "[3/5] Downloading Victron velib_python library..."
         download_and_extract "$GITHUB_VELIB" "velib_python"
         echo "      Done."
 
@@ -223,7 +234,7 @@ do_install_update() {
             | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
 
         echo ""
-        echo "[3/5] Installing files..."
+        echo "[4/5] Installing files..."
         mkdir -p dbus-epever-tracer/ext/velib_python
         cp -R dbus-epever-tracer-master/* dbus-epever-tracer
         cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
@@ -232,10 +243,6 @@ do_install_update() {
                 && chmod +x "$SCRIPT_DIR/$SCRIPT_NAME"
         fi
         rm -r velib_python-master dbus-epever-tracer-master
-        echo "      Done."
-
-        echo ""
-        echo "[4/5] Setting permissions..."
         chmod +x /data/dbus-epever-tracer/setup-epever-driver.sh
         chmod +x /data/dbus-epever-tracer/setup.sh
         chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
@@ -250,13 +257,12 @@ do_install_update() {
         echo "      Done."
 
         echo ""
-        echo "[+] Restarting driver..."
-        SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
+        echo "[+] Starting driver..."
         if [ -n "$SVC" ]; then
-            svc -t "/service/$SVC"
-            echo "      Restarted: $SVC"
+            svc -u "/service/$SVC"
+            echo "      Started: $SVC"
         else
-            echo "      No running service found — driver will start automatically when RS485 adapter is detected."
+            echo "      No service found — plug in the RS485 adapter to start the driver."
         fi
 
     fi
@@ -272,15 +278,6 @@ do_install_update() {
         echo "  Installation complete."
     fi
     echo "================================================="
-    echo ""
-    read -p "Reboot the system now? [y/N] " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Rebooting..."
-        reboot
-    else
-        echo "Reboot skipped. Changes are active without a reboot."
-    fi
     echo ""
 }
 
