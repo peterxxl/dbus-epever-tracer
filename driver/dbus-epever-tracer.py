@@ -51,7 +51,7 @@ import logging
 import traceback
 import time
 import datetime
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from gi.repository import GLib  # For main event loop
 import dbus
 import dbus.service  # For DBus service implementation
@@ -62,6 +62,23 @@ import serial  # For serial port handling
 # ===============================
 from vedbus import VeDbusService  # Victron's DBus service implementation
 
+# Venus OS stores the timezone in DBus, not in /etc/localtime, so Python sees
+# UTC unless we set TZ explicitly before any datetime calls.
+def _apply_venus_timezone():
+    if os.environ.get('TZ'):
+        return
+    try:
+        obj = dbus.SystemBus().get_object(
+            'com.victronenergy.settings', '/Settings/System/TimeZone')
+        tz = str(obj.GetValue())
+        if tz:
+            os.environ['TZ'] = tz
+            time.tzset()
+    except Exception:
+        pass
+
+_apply_venus_timezone()
+
 # ===============================
 # Global configuration variables
 # ===============================
@@ -70,7 +87,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.28-2318'
+firmwareversion = 'v2026.04.29-0949'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -435,8 +452,9 @@ class DbusEpever(object):
             if current_day != self._last_day:
                 logging.info("New day detected — snapshotting today into history and resetting counters.")
 
+                yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
                 snapshot = {
-                    'date':                datetime.now().strftime('%Y-%m-%d'),
+                    'date':                yesterday,
                     'yield':               self._dbusservice['/History/Daily/0/Yield'],
                     'max_power':           self._dbusservice['/History/Daily/0/MaxPower'],
                     'max_pv_voltage':      self._dbusservice['/History/Daily/0/MaxPvVoltage'],
