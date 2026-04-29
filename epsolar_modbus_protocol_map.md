@@ -1,6 +1,6 @@
 # EPEVER LS-B / Tracer Series — Modbus Register Map
 
-**Protocol version**: 1.1 — Beijing Epsolar Technology Co., Ltd.  
+**Protocol version**: v2.5 — Beijing Epsolar Technology Co., Ltd.  
 **Serial settings**: 115 200 bps, 8N1, no handshaking, default slave address 1.  
 **Register addresses**: hexadecimal throughout.
 
@@ -57,9 +57,9 @@ Verified by raw Modbus dump against a **Tracer 3210A** at 115 200 bps over USB R
 
 Reading 0x311A–0x311D as a block fails for any unsupported address in the range, which corrupts the serial buffer and breaks subsequent reads.
 
-### Load current register
+### Load register addresses
 
-The LS-B spec lists load current at **0x3109**. On the Tracer 3210A, the driver reads load current from **0x310D** and this matches VRM output. The 0x3108–0x310B registers appear to hold different data on this model — compare both registers against your measured load output to identify which is correct for your hardware.
+The v2.5 protocol spec places load voltage at **0x310C**, load current at **0x310D**, and load power at **0x310E–310F**. This matches observed Tracer 3210A behaviour. Registers 0x3108–0x310B are skipped by the v2.5 spec and should be treated as undocumented.
 
 ### Serial timing
 
@@ -81,9 +81,13 @@ Function code **FC04** for all sections below.
 | 0x3003 | Rated PV input power (high word) | W | ÷100 | |
 | 0x3004 | Rated battery voltage | V | ÷100 | |
 | 0x3005 | Rated charging current | A | ÷100 | |
-| 0x3006 | Rated charging power | W | ÷100 | |
+| 0x3006 | Rated charging power (low word) | W | ÷100 | 32-bit: low \| (high << 16) |
+| 0x3007 | Rated charging power (high word) | W | ÷100 | |
 | 0x3008 | Charging mode | — | — | 0x0001 = PWM |
+| 0x300D | Rated load voltage | V | ÷100 | |
 | 0x300E | Rated load current | A | ÷100 | |
+| 0x300F | Rated load power (low word) | W | ÷100 | 32-bit: low \| (high << 16) |
+| 0x3010 | Rated load power (high word) | W | ÷100 | |
 
 ### Real-Time Data — 0x3100
 
@@ -97,12 +101,11 @@ Function code **FC04** for all sections below.
 | 0x3105 | Battery charging current | A | ÷100 | |
 | 0x3106 | Battery charging power (low word) | W | ÷100 | 32-bit: low \| (high << 16) |
 | 0x3107 | Battery charging power (high word) | W | ÷100 | |
-| 0x3108 | Load voltage (spec) | V | ÷100 | May differ on Tracer 3210A — see load current note |
-| 0x3109 | Load current (spec) | A | ÷100 | Use 0x310D on Tracer 3210A |
-| 0x310A | Load power (spec, low word) | W | ÷100 | |
-| 0x310B | Load power (spec, high word) | W | ÷100 | |
-| 0x310C | Unknown (Tracer 3210A) | — | — | Possibly load voltage or alt temp |
-| 0x310D | Load current (Tracer 3210A) | A | ÷100 | Confirmed matches VRM output |
+| 0x3108–0x310B | (not documented in v2.5 spec) | — | — | Skipped in protocol; possibly unused or internal |
+| 0x310C | Load voltage | V | ÷100 | Per v2.5 spec; confirmed on Tracer 3210A |
+| 0x310D | Load current | A | ÷100 | Per v2.5 spec; confirmed matches measured output |
+| 0x310E | Load power (low word) | W | ÷100 | 32-bit: low \| (high << 16) |
+| 0x310F | Load power (high word) | W | ÷100 | |
 | 0x3110 | Battery temperature | °C | ÷100 | Signed 16-bit |
 | 0x3111 | Controller internal temperature | °C | ÷100 | Signed 16-bit |
 | 0x3112 | Power component temperature | °C | ÷100 | ⛔ beyond Tracer 3210A block limit |
@@ -144,8 +147,9 @@ Function code **FC04** for all sections below.
 | 0x3313 | Total generated energy (high) | kWh | ÷100 | |
 | 0x3314 | CO₂ reduction (low) | t | ÷100 | ⛔ beyond Tracer 3210A block limit |
 | 0x3315 | CO₂ reduction (high) | t | ÷100 | 1 kWh = 0.997 kg CO₂ |
-| 0x331B | Net battery current (low) | A | ÷100 | ⛔ beyond Tracer 3210A block limit |
-| 0x331C | Net battery current (high) | A | ÷100 | Signed; charge – discharge |
+| 0x331A | Battery voltage | V | ÷100 | ⛔ beyond Tracer 3210A block limit |
+| 0x331B | Battery current (low word) | A | ÷100 | ⛔ beyond Tracer 3210A block limit; 32-bit signed |
+| 0x331C | Battery current (high word) | A | ÷100 | |
 | 0x331D | Battery temperature | °C | ÷100 | ⛔ beyond Tracer 3210A block limit |
 | 0x331E | Ambient temperature | °C | ÷100 | ⛔ beyond Tracer 3210A block limit |
 
@@ -161,7 +165,7 @@ Function code **FC03** to read, **FC06** (single) or **FC10** (multiple) to writ
 |---------|------|------|-------|-----------------|--------|
 | 0x9000 | Battery type | — | — | 0=User-defined, 1=Sealed, 2=GEL, 3=Flooded | **spec** |
 | 0x9001 | Battery capacity | Ah | ÷1 | 1–9999 Ah | inferred |
-| 0x9067 | Battery rated voltage | — | — | 0=Auto-detect, 1=12 V, 2=24 V | **spec** |
+| 0x9067 | Battery rated voltage | — | — | 0=Auto-detect, 1=12 V, 2=24 V, 3=36 V, 4=48 V, 5=60 V, 6=110 V, 7=120 V, 8=220 V, 9=240 V | **spec** |
 | 0x9070 | Battery management mode | — | — | 0=Voltage compensation, 1=SOC | **spec** |
 
 ### Charging voltage thresholds (all voltages signed, ÷100 → V)
@@ -248,6 +252,7 @@ PV voltage thresholds for day/night transitions. No range is stated in the spec;
 | 0x901D | Line impedance | mΩ | ÷100 | Resistance of wires | |
 | 0x906D | Discharging percentage | % | ÷100 | typically 20–80 % | **spec** |
 | 0x906E | Charging percentage | % | ÷100 | typically 20–100 % | **spec** |
+| 0x9063 | Backlight time | s | ÷1 | Seconds until LCD backlight turns off | **spec** |
 
 ### Real-time clock
 
@@ -265,9 +270,14 @@ Write all three registers simultaneously (FC10) to update the clock atomically.
 
 | Address | Name | Values |
 |---------|------|--------|
+| 0x0000 | Charging device on/off | 1=On, 0=Off |
+| 0x0001 | Output control mode | 1=Manual, 0=Automatic |
 | 0x0002 | Manual load control | 1=On, 0=Off (only effective in manual mode) |
+| 0x0003 | Default load control | 1=On, 0=Off (only effective in default mode) |
 | 0x0005 | Load test mode | 1=Enable, 0=Normal |
-| 0x0006 | Force load on/off | 1=On, 0=Off |
+| 0x0006 | Force load on/off | 1=On, 0=Off (temporary test) |
+| 0x0013 | Restore system defaults | 1=Execute, 0=No |
+| 0x0014 | Clear generated energy statistics | 1=Clear (root privileges required) |
 
 ## Discrete Inputs (Read-Only, FC02)
 
