@@ -90,7 +90,7 @@ productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
 
-firmwareversion = 'v2026.04.29-1339'
+firmwareversion = 'v2026.04.29-1344'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -261,7 +261,6 @@ class DbusEpever(object):
         self._dbusservice.add_path('/DeviceInstance', deviceinstance)
         self._dbusservice.add_path('/ProductId', productid)
         self._dbusservice.add_path('/ProductName', productname)
-        self._dbusservice.add_path('/CustomName', productname)
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
         self._dbusservice.add_path('/Connected', 1)
         self._dbusservice.add_path('/Serial', serialnumber)
@@ -273,7 +272,6 @@ class DbusEpever(object):
 
         self._dbusservice.add_path('/Dc/0/Current', None, gettextcallback=_a)
         self._dbusservice.add_path('/Dc/0/Voltage', None, gettextcallback=_v)
-        self._dbusservice.add_path('/Dc/0/Temperature', None, gettextcallback=_c)
         self._dbusservice.add_path('/Alarms/HighTemperature', 0)
 
         self._dbusservice.add_path('/State',None)
@@ -331,7 +329,6 @@ class DbusEpever(object):
         self._tempservice.add_path('/Mgmt/Connection', connection)
         self._tempservice.add_path('/DeviceInstance', temperature_deviceinstance)
         self._tempservice.add_path('/ProductName', productname + ' Temperature')
-        self._tempservice.add_path('/CustomName', productname + ' Temperature')
         self._tempservice.add_path('/Connected', 1)
         self._tempservice.add_path('/Temperature', None, gettextcallback=_c)
         self._tempservice.add_path('/TemperatureType', 0)  # 0 = battery
@@ -394,7 +391,6 @@ class DbusEpever(object):
             # c3100 registers from 0x3100 - PV array and battery data
             self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100      # Register 0x3104: Battery voltage (V), divide by 100
             self._dbusservice['/Dc/0/Current'] = c3100[5]/100      # Register 0x3105: Battery charging current (A), divide by 100
-            self._dbusservice['/Dc/0/Temperature'] = c3100[17]/100 # Register 0x3111: Controller temperature (°C), divide by 100
             self._tempservice['/Temperature'] = c3100[17]/100
             self._dbusservice['/Pv/V'] = c3100[0]/100              # Register 0x3100: PV array voltage (V), divide by 100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 16)/100) # Registers 0x3102-0x3103: PV array charging power (W), divide by 100
