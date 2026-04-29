@@ -77,7 +77,9 @@ def _apply_venus_timezone():
     except Exception:
         pass
 
-_apply_venus_timezone()
+# _apply_venus_timezone() is called in main() after DBusGMainLoop(set_as_default=True),
+# because dbus.SystemBus() caches the shared connection — calling it before the main loop
+# is registered produces a connection without a main loop, which then breaks VeDbusService.
 
 # ===============================
 # Global configuration variables
@@ -87,7 +89,7 @@ serialnumber = 'WO20160415-008-0056'
 productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
-firmwareversion = 'v2026.04.29-0949'
+firmwareversion = 'v2026.04.29-1104'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
@@ -655,6 +657,9 @@ def main():
     from dbus.mainloop.glib import DBusGMainLoop
     # Set up the main loop so we can send/receive async calls to/from DBus
     DBusGMainLoop(set_as_default=True)
+
+    # Now safe to open a DBus connection for timezone lookup
+    _apply_venus_timezone()
 
     # Create the EPEVER DBus service instance
     epever = DbusEpever()
