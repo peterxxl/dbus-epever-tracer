@@ -391,7 +391,7 @@ class DbusEpever(object):
             # c3100 registers from 0x3100 - PV array and battery data
             self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100      # Register 0x3104: Battery voltage (V), divide by 100
             self._dbusservice['/Dc/0/Current'] = c3100[5]/100      # Register 0x3105: Battery charging current (A), divide by 100
-            self._tempservice['/Temperature'] = c3100[17]/100
+            self._tempservice['/Temperature'] = c3100[17]/100  # Register 0x3111: Controller temperature (°C), divide by 100
             self._dbusservice['/Pv/V'] = c3100[0]/100              # Register 0x3100: PV array voltage (V), divide by 100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 16)/100) # Registers 0x3102-0x3103: PV array charging power (W), divide by 100
             self._dbusservice['/Load/I'] = c3100[13]/100           # Register 0x310D: Load current (A), divide by 100
