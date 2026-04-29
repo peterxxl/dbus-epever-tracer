@@ -279,6 +279,15 @@ do_install_update() {
     fi
     echo "================================================="
     echo ""
+    read -p "Reboot the system now? [y/N] " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Rebooting..."
+        reboot
+    else
+        echo "Reboot skipped."
+    fi
+    echo ""
 }
 
 # ─── Dispatch ─────────────────────────────────────────────────────────────────
