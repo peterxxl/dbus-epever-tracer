@@ -276,7 +276,7 @@ PARAMS = [
         'name': 'Night threshold voltage (NTTV)',
         'type': 'voltage',
         'scale': 100, 'unit': 'V',
-        'lo': 0.0, 'hi': 10.0,
+        'lo': 0.0, 'hi': 30.0,
         'hint': 'PV voltage below this value signals nighttime.',
     },
     {
@@ -292,7 +292,7 @@ PARAMS = [
         'name': 'Day threshold voltage (DTTV)',
         'type': 'voltage',
         'scale': 100, 'unit': 'V',
-        'lo': 0.0, 'hi': 10.0,
+        'lo': 0.0, 'hi': 30.0,
         'hint': 'PV voltage above this value signals daytime.',
     },
     {
