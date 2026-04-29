@@ -90,10 +90,12 @@ productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
 
-firmwareversion = 'v2026.04.29-1313'
+firmwareversion = 'v2026.04.29-1333'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
-deviceinstance = 278    # VRM instance
+tempservicename = 'com.victronenergy.temperature.tty'
+deviceinstance = 278             # VRM instance — solarcharger service
+temperature_deviceinstance = 279 # VRM instance — temperature service
 # State mapping for EPEVER to Victron charger states:
 # Indexes: [00 01 10 11] where bits are [discharge, charge]
 # 00 = No charging, 01 = Float, 10 = Boost, 11 = Equalizing
@@ -321,6 +323,17 @@ class DbusEpever(object):
         self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = self._restored_daily_max_battery_current
         self._publish_history()
 
+        # Temperature service — separate DBus service for the controller sensor
+        self._tempservice = VeDbusService(tempservicename)
+        self._tempservice.add_path('/Mgmt/ProcessName', __file__)
+        self._tempservice.add_path('/Mgmt/Connection', connection)
+        self._tempservice.add_path('/DeviceInstance', temperature_deviceinstance)
+        self._tempservice.add_path('/ProductName', productname + ' Temperature')
+        self._tempservice.add_path('/CustomName', productname + ' Temperature')
+        self._tempservice.add_path('/Connected', 1)
+        self._tempservice.add_path('/Temperature', None, gettextcallback=_c)
+        self._tempservice.add_path('/TemperatureType', 0)  # 0 = battery
+
         # Schedule periodic data updates every 1000 ms (1 second)
         GLib.timeout_add(1000, self._update)
 
@@ -380,6 +393,7 @@ class DbusEpever(object):
             self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100      # Register 0x3104: Battery voltage (V), divide by 100
             self._dbusservice['/Dc/0/Current'] = c3100[5]/100      # Register 0x3105: Battery charging current (A), divide by 100
             self._dbusservice['/Dc/0/Temperature'] = c3100[17]/100 # Register 0x3111: Controller temperature (°C), divide by 100
+            self._tempservice['/Temperature'] = c3100[17]/100
             self._dbusservice['/Pv/V'] = c3100[0]/100              # Register 0x3100: PV array voltage (V), divide by 100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 16)/100) # Registers 0x3102-0x3103: PV array charging power (W), divide by 100
             self._dbusservice['/Load/I'] = c3100[13]/100           # Register 0x310D: Load current (A), divide by 100
@@ -627,7 +641,7 @@ def main():
         sys.exit(1)
 
     port = sys.argv[1]
-    global controller, servicename
+    global controller, servicename, tempservicename
     try:
         controller = minimalmodbus.Instrument(port, 1)  # Modbus slave address 1
     except Exception as e:
@@ -652,8 +666,9 @@ def main():
     time.sleep(0.1)
     controller.serial.reset_input_buffer()
 
-    # Build the DBus service name from the port's basename (e.g. ttyUSB0)
-    servicename = 'com.victronenergy.solarcharger.' + port.split('/')[-1]
+    # Build the DBus service names from the port's basename (e.g. ttyUSB0)
+    servicename     = 'com.victronenergy.solarcharger.' + port.split('/')[-1]
+    tempservicename = 'com.victronenergy.temperature.'  + port.split('/')[-1]
 
     from dbus.mainloop.glib import DBusGMainLoop
     # Set up the main loop so we can send/receive async calls to/from DBus
