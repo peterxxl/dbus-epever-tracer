@@ -86,11 +86,11 @@ def _apply_venus_timezone():
 # ===============================
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
-productname = 'Epever Tracer MPPT'
+productname = 'PV Charger'
 # productid = 0xA076
 productid = 0xB001
 
-firmwareversion = 'v2026.04.29-2218'
+firmwareversion = 'v2026.04.29-2237'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
