@@ -226,6 +226,7 @@ PARAMS = [
         'type': 'temp',
         'scale': 100, 'unit': '°C',
         'lo': -50, 'hi': 50,
+        'signed': True,
         'hint': 'Warning issued when battery temperature falls below this value.',
     },
     {
@@ -329,11 +330,23 @@ PARAMS = [
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def _to_signed(raw):
+    """Interpret a 16-bit unsigned register value as signed."""
+    return raw - 65536 if raw >= 32768 else raw
+
+
+def _to_unsigned(signed_raw):
+    """Convert a signed integer back to a 16-bit unsigned register value."""
+    return signed_raw + 65536 if signed_raw < 0 else signed_raw
+
+
 def fmt_value(p, raw):
     """Format a raw register value for display."""
     if p['type'] == 'enum':
         label = next((lbl for val, lbl in p['options'] if val == raw), f'unknown ({raw})')
         return label
+    if p.get('signed'):
+        raw = _to_signed(raw)
     val = raw / p['scale']
     if p['type'] in ('voltage', 'temp'):
         return f'{val:.2f} {p["unit"]}'
@@ -365,7 +378,11 @@ def read_param(instr, p):
 
 
 def write_and_verify(instr, p, raw_new):
-    """Write raw_new to the register, read back, return (ok, raw_readback)."""
+    """Write raw_new to the register, read back, return (ok, raw_readback).
+
+    raw_new is in the same domain as read_param returns (unsigned 16-bit).
+    For signed parameters the caller passes the unsigned two's-complement value.
+    """
     instr.write_registers(p['addr'], [raw_new])
     time.sleep(0.15)
     raw_back = read_param(instr, p)
@@ -458,6 +475,8 @@ def edit_param(instr, p, raw_current):
             return
 
         raw_new = round(user_val * p['scale'])
+        if p.get('signed'):
+            raw_new = _to_unsigned(raw_new)
 
     display_new = fmt_value(p, raw_new)
     try:

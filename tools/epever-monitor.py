@@ -344,7 +344,7 @@ def main():
         if params2:
             eq_cycle    = params2[0]           # 0x9016 days
             batt_t_high = params2[1] / 100     # 0x9017
-            batt_t_low  = params2[2] / 100     # 0x9018
+            batt_t_low  = signed16(params2[2]) / 100  # 0x9018 (signed: can be negative)
             ctrl_t_high = params2[3] / 100     # 0x9019
             ctrl_t_rec  = params2[4] / 100     # 0x901A
             pwr_t_high  = params2[5] / 100     # 0x901B
