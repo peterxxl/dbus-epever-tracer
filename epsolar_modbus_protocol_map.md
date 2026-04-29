@@ -1,211 +1,282 @@
-# LS-B Series MPPT Charge Controller Protocol
-## Modbus Register Address List
-**Version**: 1.1  
-**Company**: Beijing Epsolar Technology Co., Ltd.
+# EPEVER LS-B / Tracer Series — Modbus Register Map
 
-### Notes
-1. The controller’s default ID is 1 and can be modified using PC software (Solar Station Monitor) or the MT50 remote meter.
-2. Serial communication parameters: 115,200 bps baud rate, 8 data bits, 1 stop bit, no parity, no handshaking.
-3. Register addresses are in hexadecimal format.
-4. For 32-bit data (e.g., power), the L and H registers represent the low and high 16-bit values, respectively. For example, a charging input rated power of 3000 W (multiplied by 100) results in register 0x3002 holding 0x93F0 and register 0x3003 holding 0x0004.
+**Protocol version**: 1.1 — Beijing Epsolar Technology Co., Ltd.  
+**Serial settings**: 115 200 bps, 8N1, no handshaking, default slave address 1.  
+**Register addresses**: hexadecimal throughout.
+
+---
+
+## Range annotation key
+
+Ranges shown in the Setting Parameters section use the following source labels:
+
+| Label | Meaning |
+|-------|---------|
+| **spec** | Explicitly stated in the EPEVER protocol document |
+| **observed** | Read from a Tracer 3210A on a 24 V system; may differ for 12 V or other models |
+| **inferred** | Derived from the register's physical meaning — not stated in the spec |
+| *(none)* | Unknown — the spec gives no range and no observed data is available |
+
+Voltage thresholds have no explicit range in the EPEVER protocol document. Allowed values depend on the system voltage (12 V or 24 V) and the relationship between thresholds (e.g. float < boost < charging limit < HVD). The observed column shows the factory defaults on a 24 V Flooded bank.
 
 ---
 
 ## Tracer 3210A Compatibility Notes
 
-Verified by raw Modbus dump (`--dump` mode) against a **Tracer 3210A** connected at 115200 bps over USB RS-485.  Registers marked ⛔ return Modbus exception 02 (Illegal Data Address); registers marked ⚠️ require special handling.
+Verified by raw Modbus dump against a **Tracer 3210A** at 115 200 bps over USB RS-485.
 
 ### Read block limits
 
-| Block | Protocol spec count | **Tracer 3210A max count** | Notes |
-|-------|--------------------|-----------------------------|-------|
-| Rated data (FC04, 0x3000) | 15 | **0 — entire block unsupported** | Every attempt returns exception 02 immediately |
-| Real-time data (FC04, 0x3100) | 24 | **18** (0x3100–0x3111) | Requesting >18 returns exception 02 |
-| Statistical data (FC04, 0x3300) | 32 | **20** (0x3300–0x3313) | Requesting >20 returns exception 02 |
+| Block | Protocol count | **Tracer 3210A max** | Notes |
+|-------|---------------|----------------------|-------|
+| Rated data (FC04, 0x3000) | 15 | **0 — unsupported** | Every attempt returns exception 02 |
+| Real-time data (FC04, 0x3100) | 24 | **18** (0x3100–0x3111) | Count > 18 returns exception 02 |
+| Statistical data (FC04, 0x3300) | 32 | **20** (0x3300–0x3313) | Count > 20 returns exception 02 |
 | Status (FC04, 0x3200) | 3 | **3** | Works correctly |
 | Charging parameters (FC03, 0x9000) | 15 | **15** | Works correctly |
-| All other FC03 blocks | — | Works as documented | |
+| All other FC03 blocks | — | As documented | |
 
 ### Registers confirmed unsupported on Tracer 3210A
 
 | Address | Name | Reason |
 |---------|------|--------|
 | 0x3000–0x300E | Entire rated data block | Exception 02 on any FC04 read starting at 0x3000 |
-| 0x3112 | Power component temperature | Beyond the 18-register real-time limit (would require count ≥ 19) |
+| 0x3112 | Power component temperature | Beyond the 18-register real-time limit |
 | 0x3314–0x3315 | CO₂ reduction | Beyond the 20-register statistics limit |
-| 0x331B–0x331C | Net battery current | Same — beyond statistics block |
+| 0x331B–0x331C | Net battery current | Same |
 | 0x331D | Battery temperature (stats) | Same |
 | 0x331E | Ambient temperature | Same |
 
-### Registers confirmed working on Tracer 3210A (individually)
+### Registers requiring individual reads on Tracer 3210A
 
-| Address | Name | Observed value (dump) |
-|---------|------|-----------------------|
-| 0x311A | Battery SOC | 23–24 % |
-| 0x311B | Remote battery temperature | 25.00 °C |
-| 0x311D | System rated voltage | 24.00 V |
+| Address | Name | Notes |
+|---------|------|-------|
+| 0x311A | Battery SOC | Must be read alone — including it in a block causes exception 02 |
+| 0x311B | Remote battery temperature | Same |
+| 0x311D | System rated voltage | Same |
 
-> **Note:** 0x311A–0x311D must be read one register at a time.  Reading them as a 4-register block causes an exception for any unsupported address in the range, which corrupts the serial buffer and breaks subsequent reads.
+Reading 0x311A–0x311D as a block fails for any unsupported address in the range, which corrupts the serial buffer and breaks subsequent reads.
 
 ### Load current register
 
-The LS-B protocol map lists load current at **0x3109** (within the 0x3108–0x310B block).  On the Tracer 3210A the driver reads load current from **0x310D** (index 13 from base 0x3100) and this matches VRM output.  The registers at 0x3108–0x310B appear to hold different data on this model — display both and compare against your load output to identify which is correct for your hardware.
+The LS-B spec lists load current at **0x3109**. On the Tracer 3210A, the driver reads load current from **0x310D** and this matches VRM output. The 0x3108–0x310B registers appear to hold different data on this model — compare both registers against your measured load output to identify which is correct for your hardware.
 
-### Timing
+### Serial timing
 
-The 45-byte statistics response (0x3300 × 20) is sent in two bursts with a mid-frame pause while the controller reads from internal memory.  A serial timeout of at least **500 ms** is required to receive the complete frame; 200 ms causes ~15 % truncation failures.
+The 45-byte statistics response (0x3300 × 20) is sent in two bursts with a mid-frame pause while the controller reads from internal flash. A serial timeout of at least **500 ms** is required; 200 ms causes ~15 % truncation failures.
 
 ---
 
-## Rated Data (Read-Only) Input Registers
+## Read-Only Input Registers
 
-| Variable Name | Address | Description | Unit | Scale |
-|---------------|---------|-------------|------|-------|
-| Rated PV input voltage | 3000 | PV array rated voltage | V | 100 |
-| Rated PV input current | 3001 | PV array rated current | A | 100 |
-| Rated PV input power (low) | 3002 | PV array rated power (low 16 bits) | W | 100 |
-| Rated PV input power (high) | 3003 | PV array rated power (high 16 bits) | W | 100 |
-| Rated battery voltage | 3004 | Battery voltage | V | 100 |
-| Rated charging current | 3005 | Rated charging current to battery | A | 100 |
-| Rated charging power | 3006 | Rated charging power to battery | W | 100 |
-| Reserved | 3007 |  | W | 100 |
-| Charging mode | 3008 | 0001H: PWM |  |  |
-| Rated load current | 300E | Rated load output current | A | 100 |
+Function code **FC04** for all sections below.
 
-## Real-Time Data (Read-Only) Input Registers
+### Rated Data — 0x3000 (⛔ unsupported on Tracer 3210A)
 
-| Variable Name | Address | Description | Unit | Scale |
-|---------------|---------|-------------|------|-------|
-| PV input voltage | 3100 | PV array voltage | V | 100 |
-| PV input current | 3101 | PV array current | A | 100 |
-| PV input power (low) | 3102 | PV array power (low 16 bits) | W | 100 |
-| PV input power (high) | 3103 | PV array power (high 16 bits) | W | 100 |
-| Battery voltage | 3104 | Battery voltage | V | 100 |
-| Battery charging current | 3105 | Battery charging current | A | 100 |
-| Battery charging power (low) | 3106 | Battery charging power (low 16 bits) | W | 100 |
-| Battery charging power (high) | 3107 | Battery charging power (high 16 bits) | W | 100 |
-| Load voltage | 310C | Load voltage | V | 100 |
-| Load current | 310D | Load current | A | 100 |
-| Load power (low) | 310E | Load power (low 16 bits) | W | 100 |
-| Load power (high) | 310F | Load power (high 16 bits) | W | 100 |
-| Battery temperature | 3110 | Battery temperature | °C | 100 |
-| Controller internal temperature | 3111 | Internal case temperature | °C | 100 |
-| Power component temperature | 3112 | Heat sink temperature of power components | °C | 100 |
-| Battery SOC | 311A | Battery state of charge (remaining capacity percentage) | % | 100 |
-| Remote battery temperature | 311B | Battery temperature from remote sensor | °C | 100 |
-| System rated voltage | 311D | Current system rated voltage (1200 = 12 V, 2400 = 24 V) | V | 100 |
+| Address | Name | Unit | Scale | Notes |
+|---------|------|------|-------|-------|
+| 0x3000 | Rated PV input voltage | V | ÷100 | |
+| 0x3001 | Rated PV input current | A | ÷100 | |
+| 0x3002 | Rated PV input power (low word) | W | ÷100 | 32-bit: low \| (high << 16) |
+| 0x3003 | Rated PV input power (high word) | W | ÷100 | |
+| 0x3004 | Rated battery voltage | V | ÷100 | |
+| 0x3005 | Rated charging current | A | ÷100 | |
+| 0x3006 | Rated charging power | W | ÷100 | |
+| 0x3008 | Charging mode | — | — | 0x0001 = PWM |
+| 0x300E | Rated load current | A | ÷100 | |
 
-## Real-Time Status (Read-Only) Input Registers
+### Real-Time Data — 0x3100
 
-| Variable Name | Address | Description |
-|---------------|---------|-------------|
-| Battery status | 3200 | **D3-D0**: 00H: Normal, 01H: Overvoltage, 02H: Undervoltage, 03H: Low Voltage Disconnect, 04H: Fault <br> **D7-D4**: 00H: Normal, 01H: Over Temperature (above warning threshold), 02H: Low Temperature (below warning threshold) <br> **D8**: Battery internal resistance: 1 = Abnormal, 0 = Normal <br> **D15**: Rated voltage identification: 1 = Incorrect, 0 = Correct |
-| Charging equipment status | 3201 | **D15-D14**: Input voltage status: 00 = Normal, 01 = No power, 02H = High voltage, 03H = Voltage error <br> **D13**: Charging MOSFET short <br> **D12**: Charging or anti-reverse MOSFET short <br> **D11**: Anti-reverse MOSFET short <br> **D10**: Input overcurrent <br> **D9**: Load overcurrent <br> **D8**: Load short <br> **D7**: Load MOSFET short <br> **D4**: PV input short <br> **D3-D2**: Charging status: 00 = No charging, 01 = Float, 02 = Boost, 03 = Equalization <br> **D1**: 0 = Normal, 1 = Fault <br> **D0**: 1 = Running, 0 = Standby |
+| Address | Name | Unit | Scale | Notes |
+|---------|------|------|-------|-------|
+| 0x3100 | PV array voltage | V | ÷100 | |
+| 0x3101 | PV array current | A | ÷100 | |
+| 0x3102 | PV array power (low word) | W | ÷100 | 32-bit: low \| (high << 16) |
+| 0x3103 | PV array power (high word) | W | ÷100 | |
+| 0x3104 | Battery voltage | V | ÷100 | |
+| 0x3105 | Battery charging current | A | ÷100 | |
+| 0x3106 | Battery charging power (low word) | W | ÷100 | 32-bit: low \| (high << 16) |
+| 0x3107 | Battery charging power (high word) | W | ÷100 | |
+| 0x3108 | Load voltage (spec) | V | ÷100 | May differ on Tracer 3210A — see load current note |
+| 0x3109 | Load current (spec) | A | ÷100 | Use 0x310D on Tracer 3210A |
+| 0x310A | Load power (spec, low word) | W | ÷100 | |
+| 0x310B | Load power (spec, high word) | W | ÷100 | |
+| 0x310C | Unknown (Tracer 3210A) | — | — | Possibly load voltage or alt temp |
+| 0x310D | Load current (Tracer 3210A) | A | ÷100 | Confirmed matches VRM output |
+| 0x3110 | Battery temperature | °C | ÷100 | Signed 16-bit |
+| 0x3111 | Controller internal temperature | °C | ÷100 | Signed 16-bit |
+| 0x3112 | Power component temperature | °C | ÷100 | ⛔ beyond Tracer 3210A block limit |
+| 0x311A | Battery SOC | % | ÷1 | Read individually only |
+| 0x311B | Remote battery temperature | °C | ÷100 | Signed 16-bit; read individually only |
+| 0x311D | System rated voltage | V | ÷100 | Read individually only |
 
-## Statistical Parameters (Read-Only) Input Registers
+### Real-Time Status — 0x3200
 
-| Variable Name | Address | Description | Unit | Scale |
-|---------------|---------|-------------|------|-------|
-| Maximum PV voltage today | 3300 | Refreshed daily at 00:00 | V | 100 |
-| Minimum PV voltage today | 3301 | Refreshed daily at 00:00 | V | 100 |
-| Maximum battery voltage today | 3302 | Refreshed daily at 00:00 | V | 100 |
-| Minimum battery voltage today | 3303 | Refreshed daily at 00:00 | V | 100 |
-| Consumed energy today (low) | 3304 | Cleared daily at 00:00 | kWh | 100 |
-| Consumed energy today (high) | 3305 | Cleared daily at 00:00 | kWh | 100 |
-| Consumed energy this month (low) | 3306 | Cleared on the first day of the month | kWh | 100 |
-| Consumed energy this month (high) | 3307 | Cleared on the first day of the month | kWh | 100 |
-| Consumed energy this year (low) | 3308 | Cleared on January 1 | kWh | 100 |
-| Consumed energy this year (high) | 3309 | Cleared on January 1 | kWh | 100 |
-| Total consumed energy (low) | 330A |  | kWh | 100 |
-| Total consumed energy (high) | 330B |  | kWh | 100 |
-| Generated energy today (low) | 330C | Cleared daily at 00:00 | kWh | 100 |
-| Generated energy today (high) | 330D | Cleared daily at 00:00 | kWh | 100 |
-| Generated energy this month (low) | 330E | Cleared on the first day of the month | kWh | 100 |
-| Generated energy this month (high) | 330F | Cleared on the first day of the month | kWh | 100 |
-| Generated energy this year (low) | 3310 | Cleared on January 1 | kWh | 100 |
-| Generated energy this year (high) | 3311 | Cleared on January 1 | kWh | 100 |
-| Total generated energy (low) | 3312 |  | kWh | 100 |
-| Total generated energy (high) | 3313 |  | kWh | 100 |
-| CO2 reduction (low) | 3314 | 1 kWh saved = 0.997 kg CO2 or 0.272 kg carbon reduction | Ton | 100 |
-| CO2 reduction (high) | 3315 |  | Ton | 100 |
-| Net battery current (low) | 331B | Charging current minus discharging current (positive = charging, negative = discharging) | A | 100 |
-| Net battery current (high) | 331C |  | A | 100 |
-| Battery temperature | 331D | Battery temperature | °C | 100 |
-| Ambient temperature | 331E | Ambient temperature | °C | 100 |
+| Address | Name | Bit field description |
+|---------|------|-----------------------|
+| 0x3200 | Battery status | **D3–D0**: 0=Normal, 1=Overvoltage, 2=Undervoltage, 3=Low-voltage disconnect, 4=Fault<br>**D7–D4**: 0=Normal, 1=Over-temperature, 2=Low-temperature<br>**D8**: Battery resistance — 1=Abnormal<br>**D15**: Rated voltage mismatch — 1=Incorrect |
+| 0x3201 | Charging equipment status | **D15–D14**: Input voltage — 0=Normal, 1=No power, 2=High voltage, 3=Error<br>**D13**: Charging MOSFET short<br>**D12**: Charging/anti-reverse MOSFET short<br>**D11**: Anti-reverse MOSFET short<br>**D10**: Input overcurrent<br>**D9**: Load overcurrent<br>**D8**: Load short<br>**D7**: Load MOSFET short<br>**D4**: PV input short<br>**D3–D2**: Charging phase — 0=Off, 1=Float, 2=Boost, 3=Equalization<br>**D1**: 1=Fault<br>**D0**: 1=Running |
+| 0x3202 | Load on/off state | 1 = On, 0 = Off |
 
-## Setting Parameters (Read-Write) Holding Registers
+### Statistical Data — 0x3300
 
-| Variable Name | Address | Description | Unit | Scale |
-|---------------|---------|-------------|------|-------|
-| Battery type | 9000 | 0000H: User-defined, 0001H: Sealed, 0002H: GEL, 0003H: Flooded |  |  |
-| Battery capacity | 9001 | Rated battery capacity | Ah |  |
-| Temperature compensation coefficient | 9002 | Range: 0–9 | mV/°C/2V | 100 |
-| High voltage disconnect | 9003 |  | V | 100 |
-| Charging limit voltage | 9004 |  | V | 100 |
-| Overvoltage reconnect | 9005 |  | V | 100 |
-| Equalization voltage | 9006 |  | V | 100 |
-| Boost voltage | 9007 |  | V | 100 |
-| Float voltage | 9008 |  | V | 100 |
-| Boost reconnect voltage | 9009 |  | V | 100 |
-| Low voltage reconnect | 900A |  | V | 100 |
-| Undervoltage recovery | 900B |  | V | 100 |
-| Undervoltage warning | 900C |  | V | 100 |
-| Low voltage disconnect | 900D |  | V | 100 |
-| Discharging limit voltage | 900E |  | V | 100 |
-| Real-time clock (seconds/minutes) | 9013 | D7–D0: Seconds, D15–D8: Minutes (write Year, Month, Day, Minutes, Seconds simultaneously) |  |  |
-| Real-time clock (hours/day) | 9014 | D7–D0: Hours, D15–D8: Day |  |  |
-| Real-time clock (month/year) | 9015 | D7–D0: Month, D15–D8: Year |  |  |
-| Equalization charging cycle | 9016 | Interval for auto-equalization charging | Days |  |
-| Battery temperature warning upper limit | 9017 |  | °C | 100 |
-| Battery temperature warning lower limit | 9018 |  | °C | 100 |
-| Controller internal temperature upper limit | 9019 |  | °C | 100 |
-| Controller internal temperature recovery | 901A | System resumes when temperature drops below this value | °C | 100 |
-| Power component temperature upper limit | 901B | Charging/discharging stops if power component temperature exceeds this value | °C | 100 |
-| Power component temperature recovery | 901C | System resumes when power component temperature drops below this value | °C | 100 |
-| Line impedance | 901D | Resistance of connected wires | mΩ | 100 |
-| Nighttime threshold voltage (NTTV) | 901E | PV voltage below this value indicates sundown | V | 100 |
-| Night detection delay | 901F | Duration PV voltage must remain below NTTV to detect nighttime | Minutes |  |
-| Daytime threshold voltage (DTTV) | 9020 | PV voltage above this value indicates sunrise | V | 100 |
-| Day detection delay | 9021 | Duration PV voltage must remain above DTTV to detect daytime | Minutes |  |
-| Load control mode | 903D | 0000H: Manual, 0001H: Light ON/OFF, 0002H: Light ON + Timer, 0003H: Time Control |  |  |
-| Load timer 1 duration | 903E | Load output timer 1 duration (D15–D8: Hours, D7–D0: Minutes) |  |  |
-| Load timer 2 duration | 903F | Load output timer 2 duration (D15–D8: Hours, D7–D0: Minutes) |  |  |
-| Load timing 1 (on) | 9042 | Load on/off timing (seconds) | Seconds |  |
-|  | 9043 | Load on/off timing (minutes) | Minutes |  |
-|  | 9044 | Load on/off timing (hours) | Hours |  |
-| Load timing 1 (off) | 9045 | Load on/off timing (seconds) | Seconds |  |
-|  | 9046 | Load on/off timing (minutes) | Minutes |  |
-|  | 9047 | Load on/off timing (hours) | Hours |  |
-| Load timing 2 (on) | 9048 | Load on/off timing (seconds) | Seconds |  |
-|  | 9049 | Default night duration (D15–D8: Hours, D7–D0: Minutes) | Minutes |  |
-|  | 904A | Default night duration (hours) | Hours |  |
-| Load timing 2 (off) | 904B | Load on/off timing (seconds) | Seconds |  |
-|  | 904C | Load on/off timing (minutes) | Minutes |  |
-|  | 904D | Load on/off timing (hours) | Hours |  |
-| Night duration | 9065 | Total night duration |  |  |
-| Battery rated voltage code | 9067 | 0: Auto-recognize, 1: 12 V, 2: 24 V |  |  |
-| Load timing control selection | 9069 | Load timing period: 0 = One timer, 1 = Two timers |  |  |
-| Default load state (manual mode) | 906A | 0: Off, 1: On |  |  |
-| Equalization duration | 906B | Typically 60–120 minutes | Minutes |  |
-| Boost duration | 906C | Typically 60–120 minutes | Minutes |  |
-| Discharging percentage | 906D | Battery capacity percentage when discharging stops (typically 20%–80%) | % | 100 |
-| Charging percentage | 906E | Depth of charge (typically 20%–100%) | % | 100 |
-| Battery management mode | 9070 | 0: Voltage compensation, 1: SOC |  |  |
+| Address | Name | Unit | Scale | Notes |
+|---------|------|------|-------|-------|
+| 0x3300 | Maximum PV voltage today | V | ÷100 | Reset at midnight by controller |
+| 0x3301 | Minimum PV voltage today | V | ÷100 | Reset at midnight |
+| 0x3302 | Maximum battery voltage today | V | ÷100 | Reset at midnight |
+| 0x3303 | Minimum battery voltage today | V | ÷100 | Reset at midnight |
+| 0x3304 | Consumed energy today (low) | kWh | ÷100 | 32-bit pair; reset at midnight |
+| 0x3305 | Consumed energy today (high) | kWh | ÷100 | |
+| 0x3306 | Consumed energy this month (low) | kWh | ÷100 | 32-bit pair; reset 1st of month |
+| 0x3307 | Consumed energy this month (high) | kWh | ÷100 | |
+| 0x3308 | Consumed energy this year (low) | kWh | ÷100 | 32-bit pair; reset Jan 1 |
+| 0x3309 | Consumed energy this year (high) | kWh | ÷100 | |
+| 0x330A | Total consumed energy (low) | kWh | ÷100 | 32-bit pair; lifetime |
+| 0x330B | Total consumed energy (high) | kWh | ÷100 | |
+| 0x330C | Generated energy today (low) | kWh | ÷100 | 32-bit pair; reset at midnight |
+| 0x330D | Generated energy today (high) | kWh | ÷100 | |
+| 0x330E | Generated energy this month (low) | kWh | ÷100 | 32-bit pair; reset 1st of month |
+| 0x330F | Generated energy this month (high) | kWh | ÷100 | |
+| 0x3310 | Generated energy this year (low) | kWh | ÷100 | 32-bit pair; reset Jan 1 |
+| 0x3311 | Generated energy this year (high) | kWh | ÷100 | |
+| 0x3312 | Total generated energy (low) | kWh | ÷100 | 32-bit pair; lifetime |
+| 0x3313 | Total generated energy (high) | kWh | ÷100 | |
+| 0x3314 | CO₂ reduction (low) | t | ÷100 | ⛔ beyond Tracer 3210A block limit |
+| 0x3315 | CO₂ reduction (high) | t | ÷100 | 1 kWh = 0.997 kg CO₂ |
+| 0x331B | Net battery current (low) | A | ÷100 | ⛔ beyond Tracer 3210A block limit |
+| 0x331C | Net battery current (high) | A | ÷100 | Signed; charge – discharge |
+| 0x331D | Battery temperature | °C | ÷100 | ⛔ beyond Tracer 3210A block limit |
+| 0x331E | Ambient temperature | °C | ÷100 | ⛔ beyond Tracer 3210A block limit |
 
-## Coils (Read-Write)
+---
 
-| Variable Name | Address | Description |
-|---------------|---------|-------------|
-| Manual load control | 2 | In manual mode: 1 = On, 0 = Off |
-| Load test mode | 5 | 1 = Enable, 0 = Disable (normal) |
-| Force load on/off | 6 | 1 = On, 0 = Off (for temporary load testing) |
+## Read-Write Holding Registers
 
-## Discrete Inputs (Read-Only)
+Function code **FC03** to read, **FC06** (single) or **FC10** (multiple) to write.
 
-| Variable Name | Address | Description |
-|---------------|---------|-------------|
-| Controller over-temperature | 2000 | 1 = Temperature exceeds protection threshold, 0 = Normal |
-| Day/night status | 200C | 1 = Night, 0 = Day |
+### Battery bank
+
+| Address | Name | Unit | Scale | Options / Range | Source |
+|---------|------|------|-------|-----------------|--------|
+| 0x9000 | Battery type | — | — | 0=User-defined, 1=Sealed, 2=GEL, 3=Flooded | **spec** |
+| 0x9001 | Battery capacity | Ah | ÷1 | 1–9999 Ah | inferred |
+| 0x9067 | Battery rated voltage | — | — | 0=Auto-detect, 1=12 V, 2=24 V | **spec** |
+| 0x9070 | Battery management mode | — | — | 0=Voltage compensation, 1=SOC | **spec** |
+
+### Charging voltage thresholds (all voltages signed, ÷100 → V)
+
+The thresholds must satisfy: discharging limit < LVD < LVW < LVW-reconnect < LVR < boost-reconnect < float < boost < equalize < charging limit < OVR < HVD
+
+| Address | Name | Observed 24 V | Source |
+|---------|------|--------------|--------|
+| 0x9003 | High voltage disconnect | 32.00 V | observed |
+| 0x9004 | Charging limit voltage | 30.00 V | observed |
+| 0x9005 | Overvoltage reconnect | 30.00 V | observed |
+| 0x9006 | Equalization voltage | 29.20 V | observed |
+| 0x9007 | Boost / absorption voltage | 28.80 V | observed |
+| 0x9008 | Float voltage | 27.60 V | observed |
+| 0x9009 | Boost reconnect voltage | 26.40 V | observed |
+| 0x900A | Low voltage reconnect | 25.20 V | observed |
+| 0x900B | Undervoltage warning reconnect | 24.40 V | observed |
+| 0x900C | Undervoltage warning | 24.00 V | observed |
+| 0x900D | Low voltage disconnect | 22.20 V | observed |
+| 0x900E | Discharging limit voltage | 21.20 V | observed |
+
+No explicit min/max range is stated in the EPEVER protocol document for any voltage register. The controller enforces the ordering constraint between thresholds; writing a value that violates it may be silently rejected or clamped.
+
+### Temperature settings (signed 16-bit registers, ÷100 → °C)
+
+Registers 0x9017–0x901C are **signed 16-bit** integers. Reading them as unsigned produces wrong values for sub-zero setpoints (e.g. raw 0xF060 = 61536 unsigned = −4000 signed = −40.00 °C).
+
+| Address | Name | Observed | Range | Source |
+|---------|------|----------|-------|--------|
+| 0x9017 | Battery temp warning high | 65.00 °C | inferred 0–100 °C | |
+| 0x9018 | Battery temp warning low | −40.00 °C | inferred −50–50 °C | signed 16-bit |
+| 0x9019 | Controller temp limit high | 85.00 °C | inferred 0–100 °C | |
+| 0x901A | Controller temp recovery | 75.00 °C | inferred 0–100 °C | |
+| 0x901B | Power component temp limit | — | inferred 0–100 °C | |
+| 0x901C | Power component temp recovery | — | inferred 0–100 °C | |
+| 0x9002 | Temperature compensation | 3 mV/°C/2V | **0–9** (spec) | |
+
+### Timing
+
+| Address | Name | Unit | Observed | Range | Source |
+|---------|------|------|----------|-------|--------|
+| 0x906C | Boost duration | min | 120 | typically 60–120 | **spec** |
+| 0x906B | Equalization duration | min | 120 | typically 60–120 | **spec** |
+| 0x9016 | Equalization cycle | days | 30 | 0=disabled | inferred |
+
+### Sun detection
+
+PV voltage thresholds for day/night transitions. No range is stated in the spec; observed values on a 24 V system suggest these can exceed 10 V.
+
+| Address | Name | Unit | Scale | Observed | Source |
+|---------|------|------|-------|----------|--------|
+| 0x901E | Night threshold voltage (NTTV) | V | ÷100 | 10.00 V | observed |
+| 0x901F | Night detection delay | min | ÷1 | 10 min | observed |
+| 0x9020 | Day threshold voltage (DTTV) | V | ÷100 | 12.00 V | observed |
+| 0x9021 | Day detection delay | min | ÷1 | 10 min | observed |
+
+### Load control
+
+| Address | Name | Unit | Options / Notes |
+|---------|------|------|-----------------|
+| 0x903D | Load control mode | — | 0=Manual, 1=Light ON/OFF, 2=Light ON + Timer, 3=Time Control |
+| 0x906A | Default load state (manual mode) | — | 0=Off, 1=On |
+| 0x9069 | Load timing control selection | — | 0=One timer, 1=Two timers |
+| 0x903E | Load timer 1 duration | — | D15–D8: Hours, D7–D0: Minutes |
+| 0x903F | Load timer 2 duration | — | D15–D8: Hours, D7–D0: Minutes |
+| 0x9042 | Load timing 1 on (seconds) | s | |
+| 0x9043 | Load timing 1 on (minutes) | min | |
+| 0x9044 | Load timing 1 on (hours) | h | |
+| 0x9045 | Load timing 1 off (seconds) | s | |
+| 0x9046 | Load timing 1 off (minutes) | min | |
+| 0x9047 | Load timing 1 off (hours) | h | |
+| 0x9048 | Load timing 2 on (seconds) | s | |
+| 0x9049 | Load timing 2 on (minutes) | min | |
+| 0x904A | Load timing 2 on (hours) | h | |
+| 0x904B | Load timing 2 off (seconds) | s | |
+| 0x904C | Load timing 2 off (minutes) | min | |
+| 0x904D | Load timing 2 off (hours) | h | |
+| 0x9065 | Night duration | — | Total night duration |
+
+### Other settings
+
+| Address | Name | Unit | Scale | Options / Range | Source |
+|---------|------|------|-------|-----------------|--------|
+| 0x901D | Line impedance | mΩ | ÷100 | Resistance of wires | |
+| 0x906D | Discharging percentage | % | ÷100 | typically 20–80 % | **spec** |
+| 0x906E | Charging percentage | % | ÷100 | typically 20–100 % | **spec** |
+
+### Real-time clock
+
+Write all three registers simultaneously (FC10) to update the clock atomically.
+
+| Address | Name | Encoding |
+|---------|------|----------|
+| 0x9013 | Seconds / Minutes | D7–D0: Seconds, D15–D8: Minutes |
+| 0x9014 | Hours / Day | D7–D0: Hours, D15–D8: Day |
+| 0x9015 | Month / Year | D7–D0: Month, D15–D8: Year (2-digit, e.g. 26 for 2026) |
+
+---
+
+## Coils (Read-Write, FC01 read / FC05 write)
+
+| Address | Name | Values |
+|---------|------|--------|
+| 0x0002 | Manual load control | 1=On, 0=Off (only effective in manual mode) |
+| 0x0005 | Load test mode | 1=Enable, 0=Normal |
+| 0x0006 | Force load on/off | 1=On, 0=Off |
+
+## Discrete Inputs (Read-Only, FC02)
+
+| Address | Name | Values |
+|---------|------|--------|
+| 0x2000 | Controller over-temperature | 1=Above protection threshold, 0=Normal |
+| 0x200C | Day/Night status | 1=Night, 0=Day |
+
+---
 
 ## RJ-45 Port Pin Definitions
 
@@ -214,8 +285,4 @@ The 45-byte statistics response (0x3300 × 20) is sent in two bursts with a mid-
 | 1, 2 | Not connected |
 | 3, 4 | RS-485 A |
 | 5, 6 | RS-485 B |
-| 7, 8 | Ground |
-
-### Notes
-1. To enhance communication quality, ground pins 7 and 8 (connected to the battery’s negative terminal) may be used if needed. Ensure proper handling of common ground issues among connected devices.
-2. For safety, do not use pins 1 and 2.
+| 7, 8 | Ground (connect to battery negative for noise reduction) |
