@@ -117,9 +117,9 @@ Function code **FC04** for all sections below.
 
 | Address | Name | Bit field description |
 |---------|------|-----------------------|
-| 0x3200 | Battery status | **D3–D0**: 0=Normal, 1=Overvoltage, 2=Undervoltage, 3=Low-voltage disconnect, 4=Fault<br>**D7–D4**: 0=Normal, 1=Over-temperature, 2=Low-temperature<br>**D8**: Battery resistance — 1=Abnormal<br>**D15**: Rated voltage mismatch — 1=Incorrect |
+| 0x3200 | Battery status | **D3–D0**: 0=Normal, 1=Overvoltage, 2=Undervoltage, 3=Low-voltage disconnect (v2.5: "Over discharge"), 4=Fault<br>**D7–D4**: 0=Normal, 1=Over-temperature, 2=Low-temperature<br>**D8**: Battery resistance — 1=Abnormal<br>**D15**: Rated voltage mismatch — 1=Incorrect |
 | 0x3201 | Charging equipment status | **D15–D14**: Input voltage — 0=Normal, 1=No power, 2=High voltage, 3=Error<br>**D13**: Charging MOSFET short<br>**D12**: Charging/anti-reverse MOSFET short<br>**D11**: Anti-reverse MOSFET short<br>**D10**: Input overcurrent<br>**D9**: Load overcurrent<br>**D8**: Load short<br>**D7**: Load MOSFET short<br>**D4**: PV input short<br>**D3–D2**: Charging phase — 0=Off, 1=Float, 2=Boost, 3=Equalization<br>**D1**: 1=Fault<br>**D0**: 1=Running |
-| 0x3202 | Load on/off state | 1 = On, 0 = Off |
+| 0x3202 | Load on/off state (v2.5: "Discharging equipment status") | **D0**: 1=On (Running), 0=Off (Standby)<br>**D1**: 1=Fault<br>**D4**: Output over voltage<br>**D5**: Boost over voltage<br>**D6**: Short circuit (high-voltage side)<br>**D7**: Input over voltage<br>**D8**: Output voltage abnormal<br>**D9**: Unable to stop discharging<br>**D10**: Unable to discharge<br>**D11**: Short circuit<br>**D12–D13**: Output power — 0=Light, 1=Moderate, 2=Rated, 3=Overload<br>**D14–D15**: Input voltage — 0=Normal, 1=Low, 2=High, 3=No access |
 
 ### Statistical Data — 0x3300
 
