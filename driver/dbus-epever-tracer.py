@@ -90,12 +90,15 @@ productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
 
-firmwareversion = 'v2026.04.29-1344'
+firmwareversion = 'v2026.04.29-2218'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
+switchservicename = 'com.victronenergy.switch.tty'
 deviceinstance = 278             # VRM instance — solarcharger service
 temperature_deviceinstance = 279 # VRM instance — temperature service
+switch_deviceinstance = 280      # VRM instance — switch service
+switch_productid = 0xB072        # Product ID — switch service
 # State mapping for EPEVER to Victron charger states:
 # Indexes: [00 01 10 11] where bits are [discharge, charge]
 # 00 = No charging, 01 = Float, 10 = Boost, 11 = Equalizing
@@ -221,6 +224,7 @@ class DbusEpever(object):
         """Create and register the DBus service."""
         self._dbusservice = VeDbusService(servicename)
         self._exception_counter = 0
+        self._load_command = None   # pending load on/off command from switch service
 
         # Variables for tracking charge state times
         self._last_update_time = time.time()
@@ -333,8 +337,40 @@ class DbusEpever(object):
         self._tempservice.add_path('/Temperature', None, gettextcallback=_c)
         self._tempservice.add_path('/TemperatureType', 0)  # 0 = battery
 
+        # Switch service — exposes the load output as a controllable DC switch
+        self._switchservice = VeDbusService(switchservicename, bus=dbus.SystemBus(private=True))
+        self._switchservice.add_path('/Mgmt/ProcessName', __file__)
+        self._switchservice.add_path('/Mgmt/Connection', connection)
+        self._switchservice.add_path('/Mgmt/ProcessVersion', firmwareversion)
+        self._switchservice.add_path('/DeviceInstance', switch_deviceinstance)
+        self._switchservice.add_path('/ProductId', switch_productid)
+        self._switchservice.add_path('/ProductName', productname + ' DC Load')
+        self._switchservice.add_path('/Serial', serialnumber)
+        self._switchservice.add_path('/Connected', 1)
+        self._switchservice.add_path('/State', 256)
+        self._switchservice.add_path('/ModuleVoltage', None, gettextcallback=_v)
+        self._switchservice.add_path('/SwitchableOutput/output_1/State', None, writeable=True,
+                                     onchangecallback=self._on_load_switch_change)
+        self._switchservice.add_path('/SwitchableOutput/output_1/Status', 9)
+        self._switchservice.add_path('/SwitchableOutput/output_1/Name', 'Load Output')
+        self._switchservice.add_path('/SwitchableOutput/output_1/Current', None, gettextcallback=_a)
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/Group', '')
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/CustomName', '')
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/Function', 2)    # 2 = Manual control
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/ValidFunctions', 4)  # bit 2 = only Manual (hides Function row when only one option)
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/Type', 1)        # 1 = Toggle
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/ValidTypes', 2)  # bit 1 = only Toggle allowed
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/ShowUIControl', 1)  # 0=Off, 1=Always, 2=Only local, 3=Only on VRM
+
         # Schedule periodic data updates every 1000 ms (1 second)
         GLib.timeout_add(1000, self._update)
+
+    def _on_load_switch_change(self, path, value):
+        self._load_command = value
+        # Optimistically update DBus immediately so the GUI doesn't bounce back
+        # while waiting for the next read tick to confirm the new state.
+        self._switchservice['/SwitchableOutput/output_1/State'] = value
+        return True
 
     def _update(self):
         """Read registers and publish the latest values on DBus.
@@ -345,6 +381,7 @@ class DbusEpever(object):
         Any communication failure is logged and after a number of consecutive
         errors the driver exits so that the supervisor can restart it.
         """
+
 
         try:
             # Read main data registers from EPEVER (see protocol docs for meaning)
@@ -504,8 +541,29 @@ class DbusEpever(object):
             self._current_charge_state = current_state
             self._last_update_time = now
 
-            # Register 0x3202: Load on/off status
-            self._dbusservice['/Load/State'] = c3200[2]
+            # Execute any pending load switch command after reads to avoid disturbing
+            # the c3300 read timing. The GUI bounce is handled by the optimistic update
+            # in _on_load_switch_change; the read below then confirms the actual state.
+            load_command_sent = False
+            if self._load_command is not None:
+                cmd = self._load_command
+                self._load_command = None
+                load_command_sent = True
+                try:
+                    controller.write_bit(0x0002, cmd, 5)  # Coil 0x0002: Manual load control, 1=On, 0=Off
+                except Exception as e:
+                    logging.warning("Failed to write load coil 0x0002: %s", e)
+
+            # Register 0x3202 D0: load on/off status
+            load_state = c3200[2] & 1
+            self._dbusservice['/Load/State'] = load_state
+            self._switchservice['/ModuleVoltage'] = c3100[4]/100  # Register 0x3104: Battery voltage (V), divide by 100
+            # On the tick where a command was sent, preserve the optimistic State value
+            # set in the callback; the pre-write read would otherwise undo it for 1 tick.
+            if not load_command_sent:
+                self._switchservice['/SwitchableOutput/output_1/State'] = load_state
+            self._switchservice['/SwitchableOutput/output_1/Status'] = 13 if (c3200[2] & 0x0F02) else 9  # 9=normal, 13=fault (D1/D8/D9/D10/D11 of 0x3202)
+            self._switchservice['/SwitchableOutput/output_1/Current'] = c3100[13]/100  # Register 0x310D: Load current (A), divide by 100
             
             # Registers 0x3312-0x3313: Total generated energy (kWh), divide by 100
             # c3300 starts at 0x3300, so 0x3312 = index 18, 0x3313 = index 19
@@ -639,7 +697,7 @@ def main():
         sys.exit(1)
 
     port = sys.argv[1]
-    global controller, servicename, tempservicename
+    global controller, servicename, tempservicename, switchservicename
     try:
         controller = minimalmodbus.Instrument(port, 1)  # Modbus slave address 1
     except Exception as e:
@@ -667,6 +725,7 @@ def main():
     # Build the DBus service names from the port's basename (e.g. ttyUSB0)
     servicename     = 'com.victronenergy.solarcharger.' + port.split('/')[-1]
     tempservicename = 'com.victronenergy.temperature.'  + port.split('/')[-1]
+    switchservicename = 'com.victronenergy.switch.'     + port.split('/')[-1]
 
     from dbus.mainloop.glib import DBusGMainLoop
     # Set up the main loop so we can send/receive async calls to/from DBus

@@ -7,13 +7,14 @@ colour-coded real-time terminal UI. Useful for debugging and discovering
 values to implement in the driver.
 
 Usage:
-  python3 epever-monitor.py [port] [slave_addr] [interval_sec] [--dump]
+  python3 epever-monitor.py [port] [slave_addr] [interval_sec] [--dump] [--manual]
 
 Examples:
   python3 epever-monitor.py
   python3 epever-monitor.py /dev/ttyUSB0
   python3 epever-monitor.py /dev/ttyUSB0 1 2
-  python3 epever-monitor.py /dev/ttyUSB0 1 2 --dump   # raw dump to file + exit
+  python3 epever-monitor.py /dev/ttyUSB0 1 2 --dump     # raw dump to file + exit
+  python3 epever-monitor.py /dev/ttyUSB0 1 2 --manual   # press Enter to refresh
 """
 
 import sys
@@ -58,6 +59,7 @@ PORT     = args[0] if len(args) > 0 else '/dev/ttyUSB0'
 SLAVE    = int(args[1]) if len(args) > 1 else 1
 INTERVAL = float(args[2]) if len(args) > 2 else 2.0
 DUMP     = '--dump' in flags
+MANUAL   = '--manual' in flags
 
 
 # ─── Tee: write to multiple streams at once ───────────────────────────────────
@@ -281,14 +283,10 @@ def main():
         batt_a = rt[5] / 100
         batt_w = word32(rt, 6, 7) / 100
 
-        # 0x3108–0x310B: load voltage/current/power (LS-B protocol position A)
-        load_v_108 = rt[8] / 100
-        load_a_109 = rt[9] / 100
-        load_w_10a = word32(rt, 10, 11) / 100
-        # 0x310C–0x310F: temperature or alternate load position depending on model
-        reg_10c = rt[12]
-        # 0x310D: load current per the working driver (confirmed against VRM output)
-        load_a_driver = rt[13] / 100
+        # 0x310C–0x310F: load output (v2.5 spec; 0x3108–0x310B undocumented/unused)
+        load_v = rt[12] / 100        # 0x310C load voltage
+        load_a = rt[13] / 100        # 0x310D load current (driver-confirmed)
+        load_w = word32(rt, 14, 15) / 100  # 0x310E–0x310F load power
         # 0x3110–0x3111: temperature registers
         batt_temp_3110 = signed16(rt[16]) / 100
         ctrl_temp_3111 = signed16(rt[17]) / 100
@@ -447,13 +445,11 @@ def main():
             row('System rated voltage',   f"{W}{sys_volt:.0f}{RS} V",  '0x311D')
 
         # Load
-        section('Load Output')
-        row('Relay state',   f"{G}On{RS}" if load_state else f"{DM}Off{RS}",  '0x3202')
-        row('Current',       a(load_a_driver),  '0x310D  driver-confirmed register')
-        row('Voltage',       v(load_v_108),     '0x3108  may be load or unused')
-        row('Current',       a(load_a_109),     '0x3109  spec register')
-        row('Power',         w(load_w_10a),     '0x310A')
-        row('Raw reg',       f"{W}{reg_10c}{RS}", '0x310C  temp or alt load voltage')
+        section('Load Output  (0x310C–0x310F, 0x3202)')
+        row('Relay state',  f"{G}On{RS}" if load_state else f"{DM}Off{RS}",  '0x3202')
+        row('Voltage',      v(load_v),   '0x310C')
+        row('Current',      a(load_a),   '0x310D')
+        row('Power',        w(load_w),   '0x310E–0x310F')
         if load_mode is not None:
             row('Control mode',  f"{W}{load_mode}{RS}",  '0x903D')
 
@@ -528,8 +524,15 @@ def main():
             print(f"\nDump saved to: {dump_filename}")
             return
 
-        print(f"\n  {DM}Ctrl+C to exit • refreshes every {INTERVAL:.0f} s{RS}\n")
-        time.sleep(INTERVAL)
+        if MANUAL:
+            print(f"\n  {DM}Press Enter to refresh, Ctrl+C to exit{RS}\n")
+            try:
+                input()
+            except EOFError:
+                return
+        else:
+            print(f"\n  {DM}Ctrl+C to exit • refreshes every {INTERVAL:.0f} s{RS}\n")
+            time.sleep(INTERVAL)
 
 if __name__ == '__main__':
     main()

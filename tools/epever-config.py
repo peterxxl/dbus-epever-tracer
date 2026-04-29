@@ -398,19 +398,20 @@ def print_header(values):
     print(f'  {BD}{W}EPEVER Tracer Configuration{RS}  '
           f'{DM}port {PORT}  slave {SLAVE}{RS}')
     print()
-    col_w = 34
-    print(f'  {DM}  #  {"Parameter":<{col_w}} {"Current value":<18} Allowed range / options{RS}')
-    print(f'  {DM}  {"─" * (col_w + 44)}{RS}')
+    col_w = 30
+    print(f'  {DM}  #  {"Addr":<9} {"Parameter":<{col_w}} {"Current value":<18} Allowed range / options{RS}')
+    print(f'  {DM}  {"─" * (col_w + 53)}{RS}')
     for i, p in enumerate(PARAMS):
         raw = values[i]
         num = f'{i + 1:>3}.'
         name = p['name']
+        addr = f'0x{p["addr"]:04X}'
         if raw is None:
             cur = f'{R}read error{RS}'
         else:
             cur = f'{W}{fmt_value(p, raw)}{RS}'
         rng = f'{DM}{fmt_range(p)}{RS}'
-        print(f'  {DM}{num}{RS}  {C}{name:<{col_w}}{RS} {cur:<28} {rng}')
+        print(f'  {DM}{num}{RS}  {DM}{addr:<9}{RS}{C}{name:<{col_w}}{RS} {cur:<28} {rng}')
     print()
 
 

@@ -271,7 +271,7 @@ Write all three registers simultaneously (FC10) to update the clock atomically.
 | Address | Name | Values |
 |---------|------|--------|
 | 0x0000 | Charging device on/off | 1=On, 0=Off |
-| 0x0001 | Output control mode | 1=Manual, 0=Automatic |
+| 0x0001 | Output control mode | 1=Manual, 0=Automatic — **not supported on Tracer 3210A** (returns exception 02) |
 | 0x0002 | Manual load control | 1=On, 0=Off (only effective in manual mode) |
 | 0x0003 | Default load control | 1=On, 0=Off (only effective in default mode) |
 | 0x0005 | Load test mode | 1=Enable, 0=Normal |
