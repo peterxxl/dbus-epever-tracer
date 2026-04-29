@@ -87,14 +87,13 @@ def _apply_venus_timezone():
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.29-2241'
+firmwareversion = 'v2026.04.29-2251'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
 switchservicename = 'com.victronenergy.switch.tty'
 deviceinstance = 278             # VRM instance — solarcharger service
 temperature_deviceinstance = 279 # VRM instance — temperature service
-switch_deviceinstance = 280      # VRM instance — switch service
 # State mapping for EPEVER to Victron charger states:
 # Indexes: [00 01 10 11] where bits are [discharge, charge]
 # 00 = No charging, 01 = Float, 10 = Boost, 11 = Equalizing
@@ -337,7 +336,7 @@ class DbusEpever(object):
         self._switchservice.add_path('/Mgmt/ProcessName', __file__)
         self._switchservice.add_path('/Mgmt/Connection', connection)
         self._switchservice.add_path('/Mgmt/ProcessVersion', firmwareversion)
-        self._switchservice.add_path('/DeviceInstance', switch_deviceinstance)
+        self._switchservice.add_path('/DeviceInstance', 0)
         self._switchservice.add_path('/ProductName', productname + ' DC Load')
         self._switchservice.add_path('/Serial', serialnumber)
         self._switchservice.add_path('/Connected', 1)
