@@ -103,7 +103,7 @@ A single script handles everything:
 
 ```sh
 # SSH into your Venus OS device as root, then:
-wget https://github.com/peterxxl/dbus-epever-tracer/raw/master/setup-epever-driver.sh
+wget -O setup-epever-driver.sh https://github.com/peterxxl/dbus-epever-tracer/raw/master/setup-epever-driver.sh
 chmod +x setup-epever-driver.sh
 ./setup-epever-driver.sh
 ```

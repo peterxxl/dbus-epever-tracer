@@ -90,7 +90,7 @@ productname = 'Epever Tracer MPPT'
 # productid = 0xA076
 productid = 0xB001
 
-firmwareversion = 'v2026.04.29-1302'
+firmwareversion = 'v2026.04.29-1306'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 deviceinstance = 278    # VRM instance
