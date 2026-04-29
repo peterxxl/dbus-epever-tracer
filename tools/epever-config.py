@@ -94,7 +94,9 @@ PARAMS = [
         'name': 'Battery rated voltage',
         'type': 'enum',
         'scale': 1, 'unit': '',
-        'options': [(0, 'Auto-detect'), (1, '12 V'), (2, '24 V')],
+        'options': [(0, 'Auto-detect'), (1, '12 V'), (2, '24 V'), (3, '36 V'),
+                    (4, '48 V'), (5, '60 V'), (6, '110 V'), (7, '120 V'),
+                    (8, '220 V'), (9, '240 V')],
         'hint': 'Auto-detect works for most installations.',
     },
     {
