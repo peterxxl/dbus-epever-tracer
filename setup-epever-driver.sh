@@ -318,36 +318,12 @@ do_install_update() {
         bash /data/dbus-epever-tracer/setup.sh
         echo "        ${GR}Done.${RS}"
 
-        # Stop the driver now so it cannot overwrite state.json while we edit it.
+        echo ""
+        echo "  ${BD}${CY}[5/5]${RS} Restarting driver..."
         if [ -n "$SVC" ]; then
             svc -d "/service/$SVC" 2>/dev/null || true
             sleep 1
         fi
-
-        echo ""
-        python3 - <<'PYEOF'
-import json
-state_file = '/data/dbus-epever-tracer/state.json'
-try:
-    with open(state_file) as f:
-        s = json.load(f)
-except Exception:
-    s = {}
-print("  \033[2mCurrent device name  :\033[0m \033[97m" + (s.get('customname_charger') or '(not set)') + "\033[0m")
-print("  \033[2mCurrent serial number:\033[0m \033[97m" + (s.get('serialnumber') or '(not set)') + "\033[0m")
-PYEOF
-        echo ""
-        read -p "${YL}  Update device name / serial number? [y/N] ${RS}" -r REPLY
-        echo ""
-        if [[ $REPLY =~ ^[Yy] ]]; then
-            save_custom_name
-            save_serial_number
-        else
-            echo "        ${DM}Device name and serial number unchanged.${RS}"
-        fi
-
-        echo ""
-        echo "  ${BD}${CY}[5/5]${RS} Restarting driver..."
         svc -t /service/serial-starter
         sleep 4
         SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
