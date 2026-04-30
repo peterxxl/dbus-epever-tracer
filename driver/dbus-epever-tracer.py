@@ -88,13 +88,11 @@ def _apply_venus_timezone():
 # ===============================
 # These variables define the driver version, device identity, and service settings.
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-2124'
+firmwareversion = 'v2026.05.01-0022'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
 switchservicename = 'com.victronenergy.switch.tty'
-deviceinstance = 278             # VRM instance — solarcharger service
-temperature_deviceinstance = 279 # VRM instance — temperature service
 # State mapping for EPEVER to Victron charger states:
 # Indexes: [00 01 10 11] where bits are [discharge, charge]
 # 00 = No charging, 01 = Float, 10 = Boost, 11 = Equalizing
@@ -261,14 +259,14 @@ class DbusEpever(object):
         _v = lambda p, v: (str(v) + 'V')
         _c = lambda p, v: (str(v) + '°C')
 
-        logging.debug("%s /DeviceInstance = %d" % (servicename, deviceinstance))
+        logging.debug("%s /DeviceInstance = %d" % (servicename, self._deviceinstance))
 
         # Create the management objects (required by Victron DBus API)
         self._dbusservice.add_path('/Mgmt/ProcessName', __file__)
         self._dbusservice.add_path('/Mgmt/Connection', connection)
 
         # Create the mandatory device identification and status objects
-        self._dbusservice.add_path('/DeviceInstance', deviceinstance)
+        self._dbusservice.add_path('/DeviceInstance', self._deviceinstance)
         self._dbusservice.add_path('/ProductName', productname)
         self._dbusservice.add_path('/CustomName', self._customname_charger, writeable=True,
                                    onchangecallback=self._on_customname_charger)
@@ -338,7 +336,7 @@ class DbusEpever(object):
         self._tempservice = VeDbusService(tempservicename, bus=dbus.SystemBus(private=True))
         self._tempservice.add_path('/Mgmt/ProcessName', __file__)
         self._tempservice.add_path('/Mgmt/Connection', connection)
-        self._tempservice.add_path('/DeviceInstance', temperature_deviceinstance)
+        self._tempservice.add_path('/DeviceInstance', self._deviceinstance)
         self._tempservice.add_path('/ProductName', productname + ' Temperature')
         self._tempservice.add_path('/CustomName', self._customname_temp, writeable=True,
                                    onchangecallback=self._on_customname_temp)
@@ -352,7 +350,7 @@ class DbusEpever(object):
         self._switchservice.add_path('/Mgmt/ProcessName', __file__)
         self._switchservice.add_path('/Mgmt/Connection', connection)
         self._switchservice.add_path('/Mgmt/ProcessVersion', firmwareversion)
-        self._switchservice.add_path('/DeviceInstance', 0)
+        self._switchservice.add_path('/DeviceInstance', self._deviceinstance)
         self._switchservice.add_path('/ProductName', productname + ' Load Output')
         self._switchservice.add_path('/CustomName', self._customname_switch, writeable=True,
                                      onchangecallback=self._on_customname_switch)
@@ -680,6 +678,7 @@ class DbusEpever(object):
         self._customname_switch  = ''
         self._customname_output  = ''
         self._serialnumber       = ''
+        self._deviceinstance     = 278
         try:
             with open(self._state_file, 'r') as f:
                 s = json.load(f)
@@ -690,6 +689,7 @@ class DbusEpever(object):
             self._customname_switch  = s.get('customname_switch', '')
             self._customname_output  = s.get('customname_output', '')
             self._serialnumber       = s.get('serialnumber', '')
+            self._deviceinstance     = int(s.get('deviceinstance', 278))
             if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
                 self._time_in_bulk    = s.get('time_in_bulk', 0.0)
                 self._time_in_absorption = s.get('time_in_absorption', 0.0)
@@ -728,6 +728,7 @@ class DbusEpever(object):
             'customname_switch':        self._customname_switch,
             'customname_output':        self._customname_output,
             'serialnumber':             self._serialnumber,
+            'deviceinstance':           self._deviceinstance,
             'history':                  self._history,
         }
         tmp = self._state_file + '.tmp'

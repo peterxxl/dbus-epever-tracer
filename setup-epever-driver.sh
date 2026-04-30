@@ -218,6 +218,40 @@ PYEOF
     fi
 }
 
+save_device_instance() {
+    echo ""
+    echo "  ${DM}The VRM instance number identifies this device in the Victron portal."
+    echo "  Default is 278. Change only if another device on this system"
+    echo "  already uses that number.${RS}"
+    echo ""
+    read -p "${YL}  Set a custom VRM instance? [y/N] ${RS}" -r REPLY
+    echo ""
+    local INSTANCE=""
+    if [[ $REPLY =~ ^[Yy] ]]; then
+        read -p "${WH}    Enter VRM instance number (default: 278): ${RS}" -r INSTANCE
+        INSTANCE="$(echo "$INSTANCE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        if ! [[ "$INSTANCE" =~ ^[0-9]+$ ]]; then
+            echo "        ${YL}Invalid number — using default 278.${RS}"
+            INSTANCE="278"
+        fi
+    fi
+    [ -z "$INSTANCE" ] && INSTANCE="278"
+    DEVICE_INSTANCE="$INSTANCE" \
+    python3 - <<'PYEOF'
+import json, os
+state_file = '/data/dbus-epever-tracer/state.json'
+try:
+    with open(state_file) as f:
+        s = json.load(f)
+except Exception:
+    s = {}
+s['deviceinstance'] = int(os.environ['DEVICE_INSTANCE'])
+with open(state_file, 'w') as f:
+    json.dump(s, f)
+PYEOF
+    echo "        ${GR}VRM instance set to: ${BD}$INSTANCE${RS}"
+}
+
 # ─── Install / Update ─────────────────────────────────────────────────────────
 
 do_install_update() {
@@ -263,6 +297,7 @@ do_install_update() {
 
         save_custom_name
         save_serial_number
+        save_device_instance
 
         echo ""
         echo "  ${BD}${CY}[+]${RS} Starting driver..."
