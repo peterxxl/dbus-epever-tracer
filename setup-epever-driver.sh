@@ -324,8 +324,15 @@ do_install_update() {
         bash /data/dbus-epever-tracer/setup.sh
         echo "      Done."
 
-        save_custom_name
-        save_serial_number
+        echo ""
+        read -p "Update device name / serial number? [y/N] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            save_custom_name
+            save_serial_number
+        else
+            echo "      Device name and serial number unchanged."
+        fi
 
         echo ""
         echo "[+] Starting driver..."
