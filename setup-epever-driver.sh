@@ -325,6 +325,18 @@ do_install_update() {
         echo "      Done."
 
         echo ""
+        python3 - <<'PYEOF'
+import json
+state_file = '/data/dbus-epever-tracer/state.json'
+try:
+    with open(state_file) as f:
+        s = json.load(f)
+except Exception:
+    s = {}
+print("  Current device name  : " + (s.get('customname_charger') or '(not set)'))
+print("  Current serial number: " + (s.get('serialnumber') or '(not set)'))
+PYEOF
+        echo ""
         read -p "Update device name / serial number? [y/N] " -n 1 -r
         echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
