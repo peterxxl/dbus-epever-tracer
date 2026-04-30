@@ -179,7 +179,7 @@ except Exception:
 s['customname_charger'] = os.environ['CUSTOM_NAME_CHARGER']
 s['customname_temp']    = os.environ['CUSTOM_NAME_TEMP']
 s['customname_switch']  = os.environ['CUSTOM_NAME_SWITCH']
-s['customname_output']  = 'Load Output'
+s['customname_output']  = ''
 with open(state_file, 'w') as f:
     json.dump(s, f)
 PYEOF

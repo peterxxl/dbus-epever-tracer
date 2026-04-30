@@ -89,7 +89,7 @@ def _apply_venus_timezone():
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-1946'
+firmwareversion = 'v2026.04.30-1957'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -365,7 +365,6 @@ class DbusEpever(object):
         self._switchservice.add_path('/SwitchableOutput/output_1/Status', 9)
         self._switchservice.add_path('/SwitchableOutput/output_1/Name', 'Load Output')
         self._switchservice.add_path('/SwitchableOutput/output_1/Current', None, gettextcallback=_a)
-        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/Group', '')
         self._switchservice.add_path('/SwitchableOutput/output_1/Settings/CustomName',
                                      self._customname_output, writeable=True,
                                      onchangecallback=self._on_customname_output)
@@ -679,7 +678,7 @@ class DbusEpever(object):
         self._customname_charger = ''
         self._customname_temp    = ''
         self._customname_switch  = ''
-        self._customname_output  = 'Load Output'
+        self._customname_output  = ''
         try:
             with open(self._state_file, 'r') as f:
                 s = json.load(f)
@@ -688,7 +687,7 @@ class DbusEpever(object):
             self._customname_charger = s.get('customname_charger', '')
             self._customname_temp    = s.get('customname_temp', '')
             self._customname_switch  = s.get('customname_switch', '')
-            self._customname_output  = s.get('customname_output', 'Load Output')
+            self._customname_output  = s.get('customname_output', '')
             if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
                 self._time_in_bulk    = s.get('time_in_bulk', 0.0)
                 self._time_in_absorption = s.get('time_in_absorption', 0.0)
