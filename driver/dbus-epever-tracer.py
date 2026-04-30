@@ -89,7 +89,7 @@ def _apply_venus_timezone():
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-1404'
+firmwareversion = 'v2026.04.30-1933'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -271,6 +271,8 @@ class DbusEpever(object):
         # Create the mandatory device identification and status objects
         self._dbusservice.add_path('/DeviceInstance', deviceinstance)
         self._dbusservice.add_path('/ProductName', productname)
+        self._dbusservice.add_path('/CustomName', self._customname_charger, writeable=True,
+                                   onchangecallback=self._on_customname_charger)
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
         self._dbusservice.add_path('/Connected', 1)
         self._dbusservice.add_path('/Serial', serialnumber)
@@ -339,6 +341,8 @@ class DbusEpever(object):
         self._tempservice.add_path('/Mgmt/Connection', connection)
         self._tempservice.add_path('/DeviceInstance', temperature_deviceinstance)
         self._tempservice.add_path('/ProductName', productname + ' Temperature')
+        self._tempservice.add_path('/CustomName', self._customname_temp, writeable=True,
+                                   onchangecallback=self._on_customname_temp)
         self._tempservice.add_path('/Connected', 1)
         self._tempservice.add_path('/Temperature', None, gettextcallback=_c)
         self._tempservice.add_path('/TemperatureType', 0)  # 0 = battery
@@ -350,6 +354,8 @@ class DbusEpever(object):
         self._switchservice.add_path('/Mgmt/ProcessVersion', firmwareversion)
         self._switchservice.add_path('/DeviceInstance', 0)
         self._switchservice.add_path('/ProductName', productname + ' DC Load')
+        self._switchservice.add_path('/CustomName', self._customname_switch, writeable=True,
+                                     onchangecallback=self._on_customname_switch)
         self._switchservice.add_path('/Serial', serialnumber)
         self._switchservice.add_path('/Connected', 1)
         self._switchservice.add_path('/State', 256)
@@ -375,6 +381,21 @@ class DbusEpever(object):
         # Optimistically update DBus immediately so the GUI doesn't bounce back
         # while waiting for the next read tick to confirm the new state.
         self._switchservice['/SwitchableOutput/output_1/State'] = value
+        return True
+
+    def _on_customname_charger(self, path, value):
+        self._customname_charger = value
+        self._save_state()
+        return True
+
+    def _on_customname_temp(self, path, value):
+        self._customname_temp = value
+        self._save_state()
+        return True
+
+    def _on_customname_switch(self, path, value):
+        self._customname_switch = value
+        self._save_state()
         return True
 
     def _update(self):
@@ -650,11 +671,17 @@ class DbusEpever(object):
         """Restore accumulators and history from the state file."""
         self._restored_daily_max_power = 0
         self._restored_daily_max_battery_current = 0
+        self._customname_charger = ''
+        self._customname_temp    = ''
+        self._customname_switch  = ''
         try:
             with open(self._state_file, 'r') as f:
                 s = json.load(f)
-            # History is always loaded regardless of date so past days are available.
+            # History and custom names are always loaded regardless of date.
             self._history = s.get('history', [])[:30]
+            self._customname_charger = s.get('customname_charger', '')
+            self._customname_temp    = s.get('customname_temp', '')
+            self._customname_switch  = s.get('customname_switch', '')
             if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
                 self._time_in_bulk    = s.get('time_in_bulk', 0.0)
                 self._time_in_absorption = s.get('time_in_absorption', 0.0)
@@ -688,6 +715,9 @@ class DbusEpever(object):
             'daily_max_pv_voltage':     self._daily_max_pv_v,
             'daily_min_battery_voltage': self._daily_min_batt_v,
             'daily_max_battery_voltage': self._daily_max_batt_v,
+            'customname_charger':       self._customname_charger,
+            'customname_temp':          self._customname_temp,
+            'customname_switch':        self._customname_switch,
             'history':                  self._history,
         }
         tmp = self._state_file + '.tmp'
