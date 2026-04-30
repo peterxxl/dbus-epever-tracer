@@ -280,21 +280,12 @@ do_install_update() {
         SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
 
         echo ""
-        echo "[1/5] Stopping driver..."
-        if [ -n "$SVC" ]; then
-            svc -d "/service/$SVC"
-            echo "      Stopped: $SVC"
-        else
-            echo "      No running service found — continuing."
-        fi
-
-        echo ""
-        echo "[2/5] Downloading driver..."
+        echo "[1/5] Downloading driver..."
         download_and_extract "$GITHUB_DRIVER" "driver"
         echo "      Done."
 
         echo ""
-        echo "[3/5] Downloading Victron velib_python library..."
+        echo "[2/5] Downloading Victron velib_python library..."
         download_and_extract "$GITHUB_VELIB" "velib_python"
         echo "      Done."
 
@@ -302,7 +293,7 @@ do_install_update() {
             | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
 
         echo ""
-        echo "[4/5] Installing files..."
+        echo "[3/5] Installing files..."
         mkdir -p dbus-epever-tracer/ext/velib_python
         cp -R dbus-epever-tracer-master/* dbus-epever-tracer
         cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
@@ -320,7 +311,7 @@ do_install_update() {
         echo "      Done."
 
         echo ""
-        echo "[5/5] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
+        echo "[4/5] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
         bash /data/dbus-epever-tracer/setup.sh
         echo "      Done."
 
@@ -347,10 +338,18 @@ PYEOF
         fi
 
         echo ""
-        echo "[+] Starting driver..."
+        echo "[5/5] Restarting driver..."
+        # Re-discover the service name after setup.sh may have recreated symlinks.
+        SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
         if [ -n "$SVC" ]; then
-            svc -u "/service/$SVC"
-            echo "      Started: $SVC"
+            # svc -t sends SIGTERM; the supervisor restarts immediately with the new code.
+            svc -t "/service/$SVC"
+            sleep 2
+            if svok "/service/$SVC" 2>/dev/null && [ "$(svstat "/service/$SVC" 2>/dev/null | grep -c 'run:')" -gt 0 ]; then
+                echo "      Restarted: $SVC"
+            else
+                echo "      Restart signal sent to $SVC — check logs if it does not come up."
+            fi
         else
             echo "      No service found — plug in the RS485 adapter to start the driver."
         fi
