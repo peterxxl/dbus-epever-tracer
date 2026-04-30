@@ -89,7 +89,7 @@ def _apply_venus_timezone():
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-1942'
+firmwareversion = 'v2026.04.30-1946'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -366,7 +366,9 @@ class DbusEpever(object):
         self._switchservice.add_path('/SwitchableOutput/output_1/Name', 'Load Output')
         self._switchservice.add_path('/SwitchableOutput/output_1/Current', None, gettextcallback=_a)
         self._switchservice.add_path('/SwitchableOutput/output_1/Settings/Group', '')
-        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/CustomName', '')
+        self._switchservice.add_path('/SwitchableOutput/output_1/Settings/CustomName',
+                                     self._customname_output, writeable=True,
+                                     onchangecallback=self._on_customname_output)
         self._switchservice.add_path('/SwitchableOutput/output_1/Settings/Function', 2)    # 2 = Manual control
         self._switchservice.add_path('/SwitchableOutput/output_1/Settings/ValidFunctions', 4)  # bit 2 = only Manual (hides Function row when only one option)
         self._switchservice.add_path('/SwitchableOutput/output_1/Settings/Type', 1)        # 1 = Toggle
@@ -395,6 +397,9 @@ class DbusEpever(object):
 
     def _on_customname_switch(self, path, value):
         self._customname_switch = value
+
+    def _on_customname_output(self, path, value):
+        self._customname_output = value
         self._save_state()
         return True
 
@@ -674,6 +679,7 @@ class DbusEpever(object):
         self._customname_charger = ''
         self._customname_temp    = ''
         self._customname_switch  = ''
+        self._customname_output  = 'Load Output'
         try:
             with open(self._state_file, 'r') as f:
                 s = json.load(f)
@@ -682,6 +688,7 @@ class DbusEpever(object):
             self._customname_charger = s.get('customname_charger', '')
             self._customname_temp    = s.get('customname_temp', '')
             self._customname_switch  = s.get('customname_switch', '')
+            self._customname_output  = s.get('customname_output', 'Load Output')
             if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
                 self._time_in_bulk    = s.get('time_in_bulk', 0.0)
                 self._time_in_absorption = s.get('time_in_absorption', 0.0)
@@ -718,6 +725,7 @@ class DbusEpever(object):
             'customname_charger':       self._customname_charger,
             'customname_temp':          self._customname_temp,
             'customname_switch':        self._customname_switch,
+            'customname_output':        self._customname_output,
             'history':                  self._history,
         }
         tmp = self._state_file + '.tmp'
