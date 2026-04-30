@@ -87,9 +87,8 @@ def _apply_venus_timezone():
 # Global configuration variables
 # ===============================
 # These variables define the driver version, device identity, and service settings.
-serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-1957'
+firmwareversion = 'v2026.04.30-2002'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -275,7 +274,7 @@ class DbusEpever(object):
                                    onchangecallback=self._on_customname_charger)
         self._dbusservice.add_path('/FirmwareVersion', firmwareversion)
         self._dbusservice.add_path('/Connected', 1)
-        self._dbusservice.add_path('/Serial', serialnumber)
+        self._dbusservice.add_path('/Serial', self._serialnumber)
 
         # Network and BMS status (optional, for completeness)
         self._dbusservice.add_path('/Link/NetworkMode', 0)      # 0 = Standalone
@@ -343,6 +342,7 @@ class DbusEpever(object):
         self._tempservice.add_path('/ProductName', productname + ' Temperature')
         self._tempservice.add_path('/CustomName', self._customname_temp, writeable=True,
                                    onchangecallback=self._on_customname_temp)
+        self._tempservice.add_path('/Serial', self._serialnumber)
         self._tempservice.add_path('/Connected', 1)
         self._tempservice.add_path('/Temperature', None, gettextcallback=_c)
         self._tempservice.add_path('/TemperatureType', 0)  # 0 = battery
@@ -356,7 +356,7 @@ class DbusEpever(object):
         self._switchservice.add_path('/ProductName', productname + ' DC Load')
         self._switchservice.add_path('/CustomName', self._customname_switch, writeable=True,
                                      onchangecallback=self._on_customname_switch)
-        self._switchservice.add_path('/Serial', serialnumber)
+        self._switchservice.add_path('/Serial', self._serialnumber)
         self._switchservice.add_path('/Connected', 1)
         self._switchservice.add_path('/State', 256)
         self._switchservice.add_path('/ModuleVoltage', None, gettextcallback=_v)
@@ -679,6 +679,7 @@ class DbusEpever(object):
         self._customname_temp    = ''
         self._customname_switch  = ''
         self._customname_output  = ''
+        self._serialnumber       = ''
         try:
             with open(self._state_file, 'r') as f:
                 s = json.load(f)
@@ -688,6 +689,7 @@ class DbusEpever(object):
             self._customname_temp    = s.get('customname_temp', '')
             self._customname_switch  = s.get('customname_switch', '')
             self._customname_output  = s.get('customname_output', '')
+            self._serialnumber       = s.get('serialnumber', '')
             if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
                 self._time_in_bulk    = s.get('time_in_bulk', 0.0)
                 self._time_in_absorption = s.get('time_in_absorption', 0.0)
@@ -725,6 +727,7 @@ class DbusEpever(object):
             'customname_temp':          self._customname_temp,
             'customname_switch':        self._customname_switch,
             'customname_output':        self._customname_output,
+            'serialnumber':             self._serialnumber,
             'history':                  self._history,
         }
         tmp = self._state_file + '.tmp'

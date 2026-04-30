@@ -186,6 +186,35 @@ PYEOF
     echo "      Name set to: $CUSTOM_NAME"
 }
 
+save_serial_number() {
+    echo ""
+    read -p "Set a serial number for this device? [y/N] " -n 1 -r
+    echo ""
+    local SERIAL=""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        read -p "  Enter serial number: " SERIAL
+        SERIAL="$(echo "$SERIAL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    fi
+    SERIAL_NUMBER="$SERIAL" \
+    python3 - <<'PYEOF'
+import json, os
+state_file = '/data/dbus-epever-tracer/state.json'
+try:
+    with open(state_file) as f:
+        s = json.load(f)
+except Exception:
+    s = {}
+s['serialnumber'] = os.environ['SERIAL_NUMBER']
+with open(state_file, 'w') as f:
+    json.dump(s, f)
+PYEOF
+    if [ -n "$SERIAL" ]; then
+        echo "      Serial number set to: $SERIAL"
+    else
+        echo "      Serial number left empty."
+    fi
+}
+
 # ─── Install / Update ─────────────────────────────────────────────────────────
 
 do_install_update() {
@@ -230,6 +259,7 @@ do_install_update() {
         echo "      Done."
 
         save_custom_name
+        save_serial_number
 
         echo ""
         echo "[+] Starting driver..."
@@ -295,6 +325,7 @@ do_install_update() {
         echo "      Done."
 
         save_custom_name
+        save_serial_number
 
         echo ""
         echo "[+] Starting driver..."
