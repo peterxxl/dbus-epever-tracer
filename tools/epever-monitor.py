@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 _DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(_DIR, '../ext'))
+sys.path.insert(0, _DIR)  # tools/ — for epever_rtc
 
 def _apply_venus_timezone():
     """Read timezone from Venus OS DBus and apply it so Python uses local time.
@@ -50,6 +51,7 @@ def _apply_venus_timezone():
 _apply_venus_timezone()
 
 import minimalmodbus
+from epever_rtc import read_clock
 
 # ─── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -256,7 +258,7 @@ def main():
         # ── Charging parameters (FC03, holding registers) ─────────────────────
         params  = safe_read(0x9000, 15, 3, 'params (0x9000)')  # 0x9000–0x900E
         params2 = safe_read(0x9016, 12, 3, 'params2 (0x9016)') # 0x9016–0x9021 (temp limits, night/day V)
-        clock   = safe_read(0x9013, 3, 3,  'clock (0x9013)')   # 0x9013–0x9015 real-time clock
+        clock   = read_clock(instr)   # 0x9013–0x9015 real-time clock
         load_ctrl = safe_read(0x903D, 1, 3, 'load-ctrl (0x903D)') # 0x903D load control mode
         phase_dur = safe_read(0x906B, 6, 3, 'phase-dur (0x906B)') # 0x906B–0x9070
         # ── Discrete inputs (FC02) ────────────────────────────────────────────
@@ -357,16 +359,7 @@ def main():
              pwr_t_high, pwr_t_rec, line_imp, night_v, night_delay,
              day_v, day_delay) = [None] * 12
 
-        if clock:
-            clk_sec  =  clock[0] & 0xFF
-            clk_min  = (clock[0] >> 8) & 0xFF
-            clk_hour =  clock[1] & 0xFF
-            clk_day  = (clock[1] >> 8) & 0xFF
-            clk_mon  =  clock[2] & 0xFF
-            clk_year = (clock[2] >> 8) & 0xFF
-            clock_str = f"20{clk_year:02d}-{clk_mon:02d}-{clk_day:02d} {clk_hour:02d}:{clk_min:02d}:{clk_sec:02d}"
-        else:
-            clock_str = None
+        clock_str = clock.strftime('%Y-%m-%d %H:%M:%S') if clock else None
 
         load_mode   = LOAD_CONTROL_MODE.get(load_ctrl[0], f'Unknown') if load_ctrl else None
         if phase_dur:
@@ -391,8 +384,7 @@ def main():
         print(f"  {'═' * 58}")
         if clock_str:
             try:
-                ctrl_dt   = datetime.strptime(clock_str, '%Y-%m-%d %H:%M:%S')
-                drift     = int((now_local.replace(tzinfo=None) - ctrl_dt).total_seconds())
+                drift     = int((now_local.replace(tzinfo=None) - clock).total_seconds())
                 drift_abs = abs(drift)
                 sign      = '+' if drift >= 0 else '-'
                 dc        = G if drift_abs < 60 else (Y if drift_abs < 300 else R)
