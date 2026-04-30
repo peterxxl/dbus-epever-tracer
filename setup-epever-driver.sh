@@ -58,9 +58,9 @@ do_remove() {
     echo "  - Boot hook entries removed from /data/rcS.local and /data/rc.local"
     echo "  - serial-starter restarted to reassign the serial port"
     echo ""
-    read -p "Continue? [y/N] " -n 1 -r
+    read -p "Continue? [y/N] " -r REPLY
     echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if [[ ! $REPLY =~ ^[Yy] ]]; then
         echo "Cancelled. Nothing was changed."
         exit 0
     fi
@@ -115,9 +115,9 @@ do_remove() {
     echo "      Done."
 
     echo ""
-    read -p "Also delete driver files in $DRIVER_DIR? [y/N] " -n 1 -r
+    read -p "Also delete driver files in $DRIVER_DIR? [y/N] " -r REPLY
     echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if [[ $REPLY =~ ^[Yy] ]]; then
         rm -rf "$DRIVER_DIR"
         echo "      Files deleted."
     else
@@ -156,12 +156,11 @@ download_and_extract() {
 
 save_custom_name() {
     echo ""
-    read -p "Give this device a custom name? [y/N] " -n 1 -r
+    read -p "Give this device a custom name? [y/N] " -r REPLY
     echo ""
     local CUSTOM_NAME=""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        read -p "  Enter name (default: PV Charger): " CUSTOM_NAME
-        # trim leading/trailing whitespace
+    if [[ $REPLY =~ ^[Yy] ]]; then
+        read -p "  Enter name (default: PV Charger): " -r CUSTOM_NAME
         CUSTOM_NAME="$(echo "$CUSTOM_NAME" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     fi
     [ -z "$CUSTOM_NAME" ] && CUSTOM_NAME="PV Charger"
@@ -188,11 +187,11 @@ PYEOF
 
 save_serial_number() {
     echo ""
-    read -p "Set a serial number for this device? [y/N] " -n 1 -r
+    read -p "Set a serial number for this device? [y/N] " -r REPLY
     echo ""
     local SERIAL=""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        read -p "  Enter serial number: " SERIAL
+    if [[ $REPLY =~ ^[Yy] ]]; then
+        read -p "  Enter serial number: " -r SERIAL
         SERIAL="$(echo "$SERIAL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     fi
     SERIAL_NUMBER="$SERIAL" \
@@ -328,9 +327,9 @@ print("  Current device name  : " + (s.get('customname_charger') or '(not set)')
 print("  Current serial number: " + (s.get('serialnumber') or '(not set)'))
 PYEOF
         echo ""
-        read -p "Update device name / serial number? [y/N] " -n 1 -r
+        read -p "Update device name / serial number? [y/N] " -r REPLY
         echo ""
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if [[ $REPLY =~ ^[Yy] ]]; then
             save_custom_name
             save_serial_number
         else
@@ -339,19 +338,20 @@ PYEOF
 
         echo ""
         echo "[5/5] Restarting driver..."
-        # Re-discover the service name after setup.sh may have recreated symlinks.
+        # Stop the running service first so serial-starter can cleanly recreate it.
+        if [ -n "$SVC" ]; then
+            svc -d "/service/$SVC" 2>/dev/null || true
+            sleep 1
+        fi
+        # serial-starter rebuilds the volatile service copy from the updated template
+        # and restarts the driver — same mechanism the install flow uses.
+        svc -t /service/serial-starter
+        sleep 4
         SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
         if [ -n "$SVC" ]; then
-            # svc -t sends SIGTERM; the supervisor restarts immediately with the new code.
-            svc -t "/service/$SVC"
-            sleep 2
-            if svok "/service/$SVC" 2>/dev/null && [ "$(svstat "/service/$SVC" 2>/dev/null | grep -c 'run:')" -gt 0 ]; then
-                echo "      Restarted: $SVC"
-            else
-                echo "      Restart signal sent to $SVC — check logs if it does not come up."
-            fi
+            echo "      Driver restarted: $SVC"
         else
-            echo "      No service found — plug in the RS485 adapter to start the driver."
+            echo "      RS485 adapter not detected — plug it in and the driver will start automatically."
         fi
 
     fi

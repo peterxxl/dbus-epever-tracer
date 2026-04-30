@@ -88,7 +88,7 @@ def _apply_venus_timezone():
 # ===============================
 # These variables define the driver version, device identity, and service settings.
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-2014'
+firmwareversion = 'v2026.04.30-2025'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
