@@ -87,7 +87,7 @@ def _apply_venus_timezone():
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-1331'
+firmwareversion = 'v2026.04.30-1353'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -232,6 +232,15 @@ class DbusEpever(object):
         
         # Day tracking for resetting daily counters
         self._last_day = datetime.now().day
+
+        # Driver-memory peaks for register-based daily values.
+        # Tracked with max/min guards so a controller register reset (which
+        # happens at the controller's own clock midnight, potentially before
+        # system midnight) cannot overwrite the real daily peak with 0.
+        self._daily_yield       = 0.0
+        self._daily_max_pv_v    = 0.0
+        self._daily_min_batt_v  = 999.0   # will be pulled down on first tick
+        self._daily_max_batt_v  = 0.0
 
         # Rolling daily history: list of dicts, index 0 = yesterday, max 30 entries.
         # Populated from the state file at startup; prepended to at midnight.
@@ -504,11 +513,11 @@ class DbusEpever(object):
                 yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
                 snapshot = {
                     'date':                yesterday,
-                    'yield':               self._dbusservice['/History/Daily/0/Yield'],
+                    'yield':               self._daily_yield,
                     'max_power':           self._dbusservice['/History/Daily/0/MaxPower'],
-                    'max_pv_voltage':      self._dbusservice['/History/Daily/0/MaxPvVoltage'],
-                    'min_battery_voltage': self._dbusservice['/History/Daily/0/MinBatteryVoltage'],
-                    'max_battery_voltage': self._dbusservice['/History/Daily/0/MaxBatteryVoltage'],
+                    'max_pv_voltage':      self._daily_max_pv_v,
+                    'min_battery_voltage': self._daily_min_batt_v,
+                    'max_battery_voltage': self._daily_max_batt_v,
                     'max_battery_current': self._dbusservice['/History/Daily/0/MaxBatteryCurrent'],
                     'time_in_bulk':        round(self._time_in_bulk, 0),
                     'time_in_absorption':  round(self._time_in_absorption, 0),
@@ -519,13 +528,17 @@ class DbusEpever(object):
                 self._history = self._history[:30]
                 self._publish_history()
 
-                # Reset today's counters (voltage min/max reset by controller at midnight)
+                # Reset today's counters
                 self._time_in_bulk = 0.0
                 self._time_in_absorption = 0.0
                 self._time_in_float = 0.0
                 self._absorption_start_time = None
                 self._dbusservice['/History/Daily/0/MaxPower'] = 0
                 self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = 0
+                self._daily_yield      = 0.0
+                self._daily_max_pv_v   = 0.0
+                self._daily_min_batt_v = 999.0
+                self._daily_max_batt_v = 0.0
 
                 self._last_day = current_day
             
@@ -567,35 +580,39 @@ class DbusEpever(object):
             self._dbusservice['/Yield/User'] = (c3300[18] | c3300[19] << 16)/100
             self._dbusservice['/Yield/System'] = (c3300[18] | c3300[19] << 16)/100
             
-            # Registers 0x330C-0x330D: Generated energy today (kWh × 100), cleared by the
-            # controller at midnight.  Write only to today's slot; yesterday's yield is
-            # maintained by the midnight rollover block above which snapshots Daily/0/Yield
-            # before resetting it — the EPEVER has no separate "yesterday" energy register.
-            self._dbusservice['/History/Daily/0/Yield'] = (c330C[0] | c330C[1] << 16)/100
+            # Registers 0x330C-0x330D: Generated energy today (kWh × 100).
+            # The controller clears this at its own clock midnight, which may be
+            # slightly before system midnight due to clock drift.  Use max() so
+            # the peak value seen today is never lost to a controller register reset.
+            reg_yield = (c330C[0] | c330C[1] << 16) / 100
+            if reg_yield > self._daily_yield:
+                self._daily_yield = reg_yield
+            self._dbusservice['/History/Daily/0/Yield'] = self._daily_yield
 
-            # Daily max/min voltages — read directly from controller registers.
-            # 0x3300 = max PV voltage today, 0x3301 = min PV today,
-            # 0x3302 = max battery today,    0x3303 = min battery today.
-            # The controller resets these at midnight so no driver-side reset needed.
-            daily_max_pv_v   = c3300[0] / 100
-            daily_min_batt_v = c3300[3] / 100
-            daily_max_batt_v = c3300[2] / 100
+            # Daily max/min voltages — seeded from controller registers but guarded
+            # with max/min so a controller register reset before system midnight
+            # cannot pull the tracked peak back to zero.
+            reg_max_pv_v   = c3300[0] / 100
+            reg_min_batt_v = c3300[3] / 100
+            reg_max_batt_v = c3300[2] / 100
 
-            self._dbusservice['/History/Daily/0/MaxPvVoltage']      = daily_max_pv_v
-            self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = daily_min_batt_v
-            self._dbusservice['/History/Daily/0/MaxBatteryVoltage'] = daily_max_batt_v
+            if reg_max_pv_v   > self._daily_max_pv_v:   self._daily_max_pv_v   = reg_max_pv_v
+            if reg_min_batt_v < self._daily_min_batt_v:  self._daily_min_batt_v = reg_min_batt_v
+            if reg_max_batt_v > self._daily_max_batt_v:  self._daily_max_batt_v = reg_max_batt_v
 
-            # Overall lifetime max/min — still tracked in driver memory (no controller
-            # register for lifetime values), but now seeded from the daily register
-            # values which are more accurate than per-second instantaneous samples.
-            if daily_max_pv_v > self._dbusservice['/History/Overall/MaxPvVoltage']:
-                self._dbusservice['/History/Overall/MaxPvVoltage'] = daily_max_pv_v
+            self._dbusservice['/History/Daily/0/MaxPvVoltage']      = self._daily_max_pv_v
+            self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = self._daily_min_batt_v
+            self._dbusservice['/History/Daily/0/MaxBatteryVoltage'] = self._daily_max_batt_v
 
-            if daily_min_batt_v < self._dbusservice['/History/Overall/MinBatteryVoltage']:
-                self._dbusservice['/History/Overall/MinBatteryVoltage'] = daily_min_batt_v
+            # Overall lifetime max/min
+            if self._daily_max_pv_v   > self._dbusservice['/History/Overall/MaxPvVoltage']:
+                self._dbusservice['/History/Overall/MaxPvVoltage'] = self._daily_max_pv_v
 
-            if daily_max_batt_v > self._dbusservice['/History/Overall/MaxBatteryVoltage']:
-                self._dbusservice['/History/Overall/MaxBatteryVoltage'] = daily_max_batt_v
+            if self._daily_min_batt_v < self._dbusservice['/History/Overall/MinBatteryVoltage']:
+                self._dbusservice['/History/Overall/MinBatteryVoltage'] = self._daily_min_batt_v
+
+            if self._daily_max_batt_v > self._dbusservice['/History/Overall/MaxBatteryVoltage']:
+                self._dbusservice['/History/Overall/MaxBatteryVoltage'] = self._daily_max_batt_v
 
             # Max power and max battery current have no controller registers — keep tracking in memory.
             if self._dbusservice['/Yield/Power'] > self._dbusservice['/History/Daily/0/MaxPower']:
@@ -643,6 +660,10 @@ class DbusEpever(object):
                 self._restored_daily_max_power            = s.get('daily_max_power', 0)
                 self._restored_daily_max_battery_current  = s.get('daily_max_battery_current', 0)
                 self._absorption_start_time               = s.get('absorption_start_time', None)
+                self._daily_yield      = s.get('daily_yield', 0.0)
+                self._daily_max_pv_v   = s.get('daily_max_pv_voltage', 0.0)
+                self._daily_min_batt_v = s.get('daily_min_battery_voltage', 999.0)
+                self._daily_max_batt_v = s.get('daily_max_battery_voltage', 0.0)
                 logging.info("Restored daily accumulators and history from state file.")
             else:
                 logging.info("State file is from a previous day — history loaded, accumulators start fresh.")
@@ -661,6 +682,10 @@ class DbusEpever(object):
             'absorption_start_time':    self._absorption_start_time,
             'daily_max_power':          self._dbusservice['/History/Daily/0/MaxPower'],
             'daily_max_battery_current': self._dbusservice['/History/Daily/0/MaxBatteryCurrent'],
+            'daily_yield':              self._daily_yield,
+            'daily_max_pv_voltage':     self._daily_max_pv_v,
+            'daily_min_battery_voltage': self._daily_min_batt_v,
+            'daily_max_battery_voltage': self._daily_max_batt_v,
             'history':                  self._history,
         }
         tmp = self._state_file + '.tmp'
