@@ -88,7 +88,7 @@ def _apply_venus_timezone():
 # ===============================
 # These variables define the driver version, device identity, and service settings.
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-2028'
+firmwareversion = 'v2026.04.30-2052'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -353,7 +353,7 @@ class DbusEpever(object):
         self._switchservice.add_path('/Mgmt/Connection', connection)
         self._switchservice.add_path('/Mgmt/ProcessVersion', firmwareversion)
         self._switchservice.add_path('/DeviceInstance', 0)
-        self._switchservice.add_path('/ProductName', productname + ' DC Load')
+        self._switchservice.add_path('/ProductName', productname + ' Load Output')
         self._switchservice.add_path('/CustomName', self._customname_switch, writeable=True,
                                      onchangecallback=self._on_customname_switch)
         self._switchservice.add_path('/Serial', self._serialnumber)

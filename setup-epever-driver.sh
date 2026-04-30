@@ -318,6 +318,12 @@ do_install_update() {
         bash /data/dbus-epever-tracer/setup.sh
         echo "        ${GR}Done.${RS}"
 
+        # Stop the driver now so it cannot overwrite state.json while we edit it.
+        if [ -n "$SVC" ]; then
+            svc -d "/service/$SVC" 2>/dev/null || true
+            sleep 1
+        fi
+
         echo ""
         python3 - <<'PYEOF'
 import json
@@ -342,10 +348,6 @@ PYEOF
 
         echo ""
         echo "  ${BD}${CY}[5/5]${RS} Restarting driver..."
-        if [ -n "$SVC" ]; then
-            svc -d "/service/$SVC" 2>/dev/null || true
-            sleep 1
-        fi
         svc -t /service/serial-starter
         sleep 4
         SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
