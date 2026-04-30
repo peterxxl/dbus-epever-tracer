@@ -27,6 +27,8 @@ EPEVER Tracer hardware
 dbus-epever-tracer.py  ← single Python process
      │ dbus-python + GLib main loop
 com.victronenergy.solarcharger.ttyUSBx  (system DBus service)
+com.victronenergy.temperature.ttyUSBx   (system DBus service)
+com.victronenergy.switch.ttyUSBx        (system DBus service)
      │
 Venus OS device (Cerbo GX, etc.)
      │ GX display / Modbus-TCP / Node-RED / …
@@ -55,6 +57,7 @@ The process is supervised by daemontools/runit (Venus OS standard). If it exits,
 | `tools/epever-monitor.py` | Standalone live terminal monitor — reads all register blocks, colour-coded display, `--dump` mode for raw frame capture |
 | `tools/epever-config.py` | Interactive configuration tool — reads all writable holding registers, shows ranges/options, writes and verifies |
 | `tools/epever-update-clock.py` | Reads the controller RTC, shows drift vs system clock, optionally writes system time to controller |
+| `tools/epever_rtc.py` | Shared RTC register helpers (`read_clock`, `write_clock`) imported by both the driver and the tools |
 
 The Victron `velib_python` library is **not** in this repo. The installer downloads it at runtime and places it at `ext/velib_python/` relative to the driver directory. The driver adds that path to `sys.path` before importing `vedbus`.
 
@@ -99,6 +102,14 @@ The driver and all tools call `_apply_venus_timezone()` which reads the DBus set
 
 ---
 
+## Automatic controller clock sync
+
+On startup, `_sync_controller_clock()` is called from `main()` after `_apply_venus_timezone()` and before `DbusEpever()` is instantiated. It reads the controller RTC via `read_clock()`, computes drift against local system time, and if the absolute drift exceeds 60 seconds it writes the current time with `write_clock()` and reads back to confirm.
+
+The shared helpers `read_clock(ctrl)` and `write_clock(ctrl, dt)` live in `tools/epever_rtc.py`. The driver imports them by inserting `../tools` into `sys.path`. The tools import them with `sys.path.insert(0, _DIR)` where `_DIR` is the directory of the tool script.
+
+---
+
 ## Charging state mapping
 
 EPEVER encodes the charging phase in bits 3–2 of register `0x3201`:
@@ -130,7 +141,7 @@ EPEVER has no separate absorption state — "Boost" covers both Bulk and Absorpt
 
 ## Daily statistics and midnight rollover
 
-**Voltage max/min** (`MaxPvVoltage`, `MinBatteryVoltage`, `MaxBatteryVoltage`) are read directly from controller registers `0x3300–0x3303` on every update tick. The controller maintains and resets these at midnight.
+**Yield, max PV voltage, min/max battery voltage** — these are tracked in driver memory (`_daily_yield`, `_daily_max_pv_v`, `_daily_min_batt_v`, `_daily_max_batt_v`) using a max/min guard: the in-memory value is only updated when the register value is higher (for max) or lower (for min) than the current accumulator. The controller resets its own daily registers at its own clock midnight, which may differ from system midnight due to clock drift. Reading register values directly at rollover would capture zeros or near-zeros. Using driver-side accumulators prevents this.
 
 **Max power and max battery current** have no controller register and are tracked in driver memory, reset at midnight.
 
@@ -138,7 +149,7 @@ EPEVER has no separate absorption state — "Boost" covers both Bulk and Absorpt
 
 **Midnight rollover** — detected by comparing `datetime.now().day` to `self._last_day`. At rollover the current day's accumulators are snapshotted into `_history` with **yesterday's date** (`datetime.now() - timedelta(days=1)`), then the accumulators are reset. The snapshot must use yesterday's date because `datetime.now()` already returns the new day at the moment rollover fires.
 
-**State persistence** — the driver saves daily accumulators (time-in-phase, max power, max battery current) and the full 30-day history list to a JSON file at `/data/dbus-epever-tracer/state.json` on every update tick. On startup it restores accumulators if the file's date matches today; history is always loaded regardless of date.
+**State persistence** — the driver saves daily accumulators (time-in-phase, max power, max battery current, daily peak values) and the full 30-day history list to a JSON file at `/data/dbus-epever-tracer/state.json` on every update tick. On startup it restores accumulators if the file's date matches today; history is always loaded regardless of date.
 
 **Rolling history** — up to 30 previous days are stored in `self._history` (index 0 = yesterday). Published to DBus as `/History/Daily/1/` through `/History/Daily/30/`. `/History/Overall/DaysAvailable` is set to 31 (today + 30 history days).
 
@@ -148,7 +159,30 @@ EPEVER has no separate absorption state — "Boost" covers both Bulk and Absorpt
 
 The service name is `com.victronenergy.solarcharger.<port>` where `<port>` is the last component of the serial device path (e.g. `ttyUSB0`). This means multiple instances can run concurrently on different ports.
 
-The device instance (`deviceinstance = 278`) is the number shown in the Venus OS device and VRM portal. Change it if another device on the same system already uses 278.
+All three services (solarcharger, temperature, switch) use the same device instance number. Device instance numbers are unique per product type, not globally across all product types. The instance number defaults to `278` and is loaded from `state.json` (`deviceinstance` key). It is set at install time via the setup script and can also be edited directly in `state.json`.
+
+---
+
+## CustomName
+
+All three services expose `/CustomName` as a writeable DBus path. Changes are written back to `state.json` via `onchangecallback` and survive driver restarts. The switch service also exposes `/SwitchableOutput/output_1/Settings/CustomName` (writeable, persisted as `customname_output`).
+
+Default values written at install time:
+
+| State key | Default |
+|---|---|
+| `customname_charger` | Set by install script (e.g. `PV Charger`) |
+| `customname_temp` | Set by install script (e.g. `PV Charger Temperature`) |
+| `customname_switch` | Set by install script (e.g. `PV Charger Load Output`) |
+| `customname_output` | `''` (empty — Venus OS shows the hardware name) |
+
+**Important:** the driver writes `state.json` every second. Never edit `state.json` while the driver is running — use `svc -d` to stop it first, edit, then restart.
+
+---
+
+## Serial number
+
+`self._serialnumber` is loaded from `state.json` (`serialnumber` key, default `''`). It is applied to `/Serial` on all three services and persisted through `_save_state()`. Set at install time; empty by default.
 
 ---
 
@@ -180,15 +214,22 @@ All tools read the Venus OS timezone from `com.victronenergy.settings /Settings/
 
 ### epever-monitor.py
 
-Reads all available register blocks and displays a colour-coded live terminal UI. Supports `--dump` mode to capture one iteration of raw Modbus bytes to a timestamped file and exit.
+Reads all available register blocks and displays a colour-coded live terminal UI. Supports `--dump` mode to capture one iteration of raw Modbus bytes to a timestamped file and exit. Uses `read_clock()` from `epever_rtc.py` to display the controller clock and drift.
 
 ### epever-config.py
 
-Interactive menu-driven tool for reading and writing all writable holding registers (0x9000 range). Each parameter entry has a type (`voltage`, `int`, `enum`, `temp`), scale, unit, allowed range or options list, and an optional `signed=True` flag for registers that use two's complement encoding. After writing, the register is read back to verify the controller accepted the value.
+Interactive menu-driven tool for reading and writing all writable holding registers (0x9000 range). Each parameter entry has a type (`voltage`, `int`, `enum`, `temp`), scale, unit, allowed range or options list, and an optional `signed=True` flag for registers that use two's complement encoding. The parameter list includes the register address. After writing, the register is read back to verify the controller accepted the value.
 
 ### epever-update-clock.py
 
-Reads the controller RTC (registers 0x9013–0x9015), compares it to system local time, colour-codes the drift, and optionally writes all three RTC registers atomically via FC10.
+Reads the controller RTC via `read_clock()` (from `epever_rtc.py`), compares it to system local time, colour-codes the drift, and optionally writes all three RTC registers atomically via `write_clock()`.
+
+### epever_rtc.py
+
+Shared module — not a standalone tool. Provides:
+
+- `read_clock(ctrl)` — reads registers 0x9013–0x9015 (FC3) and returns a naive `datetime` in local time, or `None` on failure.
+- `write_clock(ctrl, dt)` — encodes a `datetime` and writes it to registers 0x9013–0x9015 atomically via FC10.
 
 ---
 
@@ -214,6 +255,8 @@ There is no automated test suite. The only way to validate a change is to run it
 - **Serial timeout:** Must be at least 500 ms. The 45-byte statistics response (0x3300 × 20) has a mid-frame pause while the controller reads from internal memory; 200 ms causes truncation failures.
 - **Signed 16-bit registers:** Temperature registers that can go negative (e.g. 0x9018 battery temp warning low) use two's complement. Reading as unsigned gives wrong values. Apply `signed16()` on read; convert back to unsigned two's complement before writing.
 - **DBus main loop order:** `_apply_venus_timezone()` calls `dbus.SystemBus()`. This must happen after `DBusGMainLoop(set_as_default=True)` in `main()`. Calling it at module load time caches a main-loop-less connection and breaks `VeDbusService`.
+- **state.json and the running driver:** The driver writes `state.json` every second. If you write to `state.json` while the driver is running, the driver will overwrite your changes within a second. Always stop the driver with `svc -d` before editing `state.json` directly.
+- **Daily peak accumulators vs controller registers:** Do not replace the driver-side `_daily_max_pv_v` / `_daily_min_batt_v` / `_daily_yield` accumulators with direct register reads at rollover. The controller resets its own registers at its own clock midnight, which can precede system midnight; reading at that moment captures zeroed values. The accumulator pattern (update only when register value is a new extreme) prevents this.
 
 ---
 
@@ -238,7 +281,17 @@ The address `1` is the second argument to `minimalmodbus.Instrument(port, 1)`. S
 **Install / update / remove on device**
 Run `setup-epever-driver.sh` on the Venus OS device. It auto-detects whether the driver is installed and offers install, update, or remove.
 
+**Change device name, serial number, or VRM instance after install**
+Stop the driver, edit `/data/dbus-epever-tracer/state.json` directly, then restart:
+```sh
+svc -d /service/dbus-epever-tracer.ttyUSB0
+# edit /data/dbus-epever-tracer/state.json
+svc -t /service/serial-starter
+```
+Or write to the `/CustomName` DBus path from any Victron tool — changes are saved to `state.json` automatically.
+
 **Sync the controller clock**
+The driver syncs automatically on startup. To sync manually:
 ```sh
 svc -d /service/dbus-epever-tracer.ttyUSB0
 python3 /data/dbus-epever-tracer/tools/epever-update-clock.py

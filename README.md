@@ -37,9 +37,10 @@ VRM portal (remote monitoring, via internet)
 The driver is a Python 3 process that:
 
 1. Opens the RS-485 serial port at startup (port passed as a CLI argument by `serial-starter`).
-2. Reads six blocks of Modbus registers once per second (holding registers + one FC02 discrete input).
-3. Converts raw register values to SI units and maps EPEVER states/errors to Victron equivalents.
-4. Publishes everything across three DBus services, which the Venus OS device picks up automatically.
+2. Syncs the controller's real-time clock to system time if drift exceeds 60 seconds.
+3. Reads six blocks of Modbus registers once per second.
+4. Converts raw register values to SI units and maps EPEVER states/errors to Victron equivalents.
+5. Publishes everything across three DBus services, which the Venus OS device picks up automatically.
 
 The three DBus services registered:
 
@@ -68,6 +69,8 @@ The three DBus services registered:
 - EPEVER status bits translated to Victron warning codes
 - **High-temperature alarm** (`/Alarms/HighTemperature`) from controller discrete input 0x2000
 - **State persistence** — daily accumulators and 30-day history saved to `/data/dbus-epever-tracer/state.json` every tick; restored on restart so a driver restart within the same day loses no data
+- **Automatic controller clock sync** — on startup the driver compares the controller RTC to system time and writes the correct time if drift exceeds 60 seconds
+- **Custom device names** — all three services expose a writeable `/CustomName` DBus path; names are saved to `state.json` and restored across restarts
 - Automatic reconnection: exits after 3 consecutive Modbus failures so the supervisor restarts it
 
 ---
@@ -78,6 +81,7 @@ The three DBus services registered:
 
 | Path | Unit | Description |
 |---|---|---|
+| `/CustomName` | — | User-defined device name (writeable) |
 | `/Dc/0/Voltage` | V | Battery voltage |
 | `/Dc/0/Current` | A | Battery charging current |
 | `/Pv/V` | V | PV array voltage |
@@ -100,6 +104,7 @@ Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Fl
 
 | Path | Unit | Description |
 |---|---|---|
+| `/CustomName` | — | User-defined device name (writeable) |
 | `/Temperature` | °C | Controller internal temperature (register 0x3111) |
 | `/TemperatureType` | — | `0` = Battery sensor type |
 
@@ -107,7 +112,9 @@ Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Fl
 
 | Path | Description |
 |---|---|
-| `/SwitchableOutput/output_1/State` | Current load output state (writable) |
+| `/CustomName` | User-defined device name (writeable) |
+| `/SwitchableOutput/output_1/State` | Current load output state (writeable) |
+| `/SwitchableOutput/output_1/Settings/CustomName` | User-defined output label (writeable) |
 | `/SwitchableOutput/output_1/Status` | `9` = Normal, `13` = Fault |
 | `/SwitchableOutput/output_1/Current` | Load output current |
 | `/ModuleVoltage` | Battery voltage (mirror) |
@@ -152,9 +159,10 @@ The script detects whether the driver is already installed and presents the appr
 3. Add an `epever` entry to `/etc/venus/serial-starter.conf`.
 4. Add a udev rule for the FT232R USB adapter.
 5. Create symlinks under `/opt/victronenergy/` and register boot hooks.
-6. Restart `serial-starter` so the driver starts immediately — no reboot needed.
+6. Prompt for a custom device name, serial number, and VRM instance number (all optional — sensible defaults are used if skipped).
+7. Restart `serial-starter` so the driver starts immediately — no reboot needed.
 
-**Update** downloads the latest release and restarts the driver in place.
+**Update** downloads the latest release and restarts the driver in place. Device name, serial number, and VRM instance are not changed during an update — edit them directly in `/data/dbus-epever-tracer/state.json` or via the DBus `/CustomName` path if needed.
 
 **Remove** cleanly undoes every change the installer made:
 - Stops and removes the driver service
@@ -166,16 +174,17 @@ The script detects whether the driver is already installed and presents the appr
 
 ---
 
-## Customisation
+## Configuration
 
-Open `driver/dbus-epever-tracer.py` and edit the constants near the top of the file before installing (or after, then restart the service):
+Device-specific settings are stored in `/data/dbus-epever-tracer/state.json` and set during installation. They can be changed at any time by editing the file directly (restart the driver afterwards) or, for names, by writing to the `/CustomName` DBus path from any Victron tool.
 
-| Variable | Default | Purpose |
+| Key | Default | Description |
 |---|---|---|
-| `serialnumber` | `'WO20160415-008-0056'` | Device serial shown on the Venus OS device and in the VRM portal |
-| `productname` | `'Epever Tracer MPPT'` | Product name shown on the Venus OS device |
-| `firmwareversion` | _(auto-stamped)_ | Set to `vYYYY.MM.DD-HHMM` by the pre-commit hook on every commit |
-| `deviceinstance` | `278` | Device instance number — must be unique among all devices on the same Venus OS installation |
+| `customname_charger` | `PV Charger` | Name shown for the solar charger service |
+| `customname_temp` | `PV Charger Temperature` | Name shown for the temperature service |
+| `customname_switch` | `PV Charger Load Output` | Name shown for the switch service |
+| `serialnumber` | _(empty)_ | Serial number shown on the Venus OS device and VRM portal |
+| `deviceinstance` | `278` | VRM instance number — must be unique per product type on the same Venus OS installation |
 
 ---
 
@@ -239,7 +248,7 @@ python3 /data/dbus-epever-tracer/tools/epever-monitor.py /dev/ttyUSB1 1 5
 python3 /data/dbus-epever-tracer/tools/epever-monitor.py /dev/ttyUSB0 1 2 --dump
 ```
 
-The display shows: PV voltage / current / power, battery voltage / current / charging power, load current and state, charging state, battery SOC and temperature, controller temperature, today's and yesterday's statistics (generated energy, max/min voltages, max power), lifetime totals, charging parameters, and the controller's real-time clock.
+The display shows: PV voltage / current / power, battery voltage / current / charging power, load current and state, charging state, battery SOC and temperature, controller temperature, today's and yesterday's statistics (generated energy, max/min voltages, max power), lifetime totals, charging parameters, and the controller's real-time clock with drift from system time.
 
 ---
 
@@ -265,11 +274,11 @@ Example session:
 ```
   EPEVER Tracer Configuration  port /dev/ttyUSB0  slave 1
 
-    #  Parameter                          Current value      Allowed range / options
-    ──────────────────────────────────────────────────────────────────────────────
-    1.  Battery type                       Sealed             0=User defined  |  1=Sealed  |  2=GEL  |  3=Flooded
-    2.  Battery capacity                   200 Ah             1 – 9999 Ah
-    9.  Boost / absorption voltage         28.80 V            9.0 – 32.0 V
+    #  Addr      Parameter                      Current value      Allowed range / options
+    ──────────────────────────────────────────────────────────────────────────────────────
+    1.  0x9000   Battery type                   Sealed             0=User defined  |  1=Sealed  |  2=GEL  |  3=Flooded
+    2.  0x9001   Battery capacity               200 Ah             1 – 9999 Ah
+    9.  0x9007   Boost / absorption voltage     28.80 V            9.0 – 32.0 V
    ...
 
   Enter parameter number to edit, r to refresh, or q to quit:
@@ -285,7 +294,9 @@ After entering a new value and confirming, the tool writes it to the controller 
 
 ## Clock Sync
 
-`tools/epever-update-clock.py` reads the controller's internal real-time clock, compares it to the system clock, and optionally sets it to the correct local time. The EPEVER Tracer has no NTP — its clock drifts over time and needs occasional manual correction.
+`tools/epever-update-clock.py` reads the controller's internal real-time clock, compares it to the system clock, and optionally sets it to the correct local time.
+
+The driver also syncs the clock automatically on startup if drift exceeds 60 seconds, so manual use of this tool is rarely needed.
 
 ```sh
 python3 /data/dbus-epever-tracer/tools/epever-update-clock.py [port] [slave_addr]
@@ -319,7 +330,8 @@ dbus-epever-tracer/
 ├── tools/
 │   ├── epever-monitor.py            Live terminal monitor / raw dump tool
 │   ├── epever-config.py             Interactive controller configuration tool
-│   └── epever-update-clock.py       Sync controller RTC to system clock
+│   ├── epever-update-clock.py       Sync controller RTC to system clock
+│   └── epever_rtc.py                Shared RTC register helpers (used by driver and tools)
 ├── epsolar_modbus_protocol_map.md   EPEVER register reference
 ├── setup-epever-driver.sh           Install / update / remove
 ├── setup.sh                         Post-update OS config (boot hooks, symlinks, udev)
