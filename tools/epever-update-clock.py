@@ -47,6 +47,7 @@ def _apply_venus_timezone():
 _apply_venus_timezone()
 
 import minimalmodbus
+from epever_rtc import read_clock, write_clock
 
 # ─── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -75,32 +76,11 @@ def local_now():
     """
     return datetime.now(timezone.utc).astimezone()
 
-def read_clock(instr):
-    """Return the controller RTC as a naive local datetime, or None on failure."""
-    try:
-        regs = instr.read_registers(0x9013, 3, 3)
-        sec  =  regs[0] & 0xFF
-        mn   = (regs[0] >> 8) & 0xFF
-        hr   =  regs[1] & 0xFF
-        day  = (regs[1] >> 8) & 0xFF
-        mon  =  regs[2] & 0xFF
-        yr   = (regs[2] >> 8) & 0xFF
-        return datetime(2000 + yr, mon, day, hr, mn, sec)
-    except Exception:
-        return None
-
 def drift_label(drift_sec):
     drift_abs = abs(drift_sec)
     sign      = '+' if drift_sec >= 0 else '-'
     dc        = G if drift_abs < 60 else (Y if drift_abs < 300 else R)
     return f"{dc}{sign}{drift_abs} s{RS}", drift_abs
-
-def write_clock(instr, dt):
-    """Write a datetime to the controller RTC (registers 0x9013–0x9015)."""
-    reg0 = ((dt.minute & 0xFF) << 8) | (dt.second & 0xFF)
-    reg1 = ((dt.day    & 0xFF) << 8) | (dt.hour   & 0xFF)
-    reg2 = ((dt.year % 100   ) << 8) | (dt.month  & 0xFF)
-    instr.write_registers(0x9013, [reg0, reg1, reg2])
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 

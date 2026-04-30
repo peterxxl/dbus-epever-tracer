@@ -44,6 +44,7 @@ import os
 _DRIVER_DIR = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(1, os.path.join(_DRIVER_DIR, '../ext/velib_python'))
 sys.path.insert(1, os.path.join(_DRIVER_DIR, '../ext'))  # bundled minimalmodbus
+sys.path.insert(1, os.path.join(_DRIVER_DIR, '../tools'))  # shared utilities (epever_rtc)
 
 import minimalmodbus
 import json
@@ -61,6 +62,7 @@ import serial  # For serial port handling
 # Local application imports
 # ===============================
 from vedbus import VeDbusService  # Victron's DBus service implementation
+from epever_rtc import read_clock, write_clock  # shared RTC register helpers
 
 # Venus OS stores the timezone in DBus, not in /etc/localtime, so Python sees
 # UTC unless we set TZ explicitly before any datetime calls.
@@ -87,7 +89,7 @@ def _apply_venus_timezone():
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.30-1353'
+firmwareversion = 'v2026.04.30-1402'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -700,6 +702,45 @@ class DbusEpever(object):
 
 
 # ===============================
+# Clock synchronisation
+# ===============================
+
+def _sync_controller_clock(ctrl):
+    """Read the controller RTC and sync it to system local time if drift > 60 s."""
+    from datetime import timezone as _tz
+    local_now = lambda: datetime.now(_tz.utc).astimezone().replace(tzinfo=None)
+
+    ctrl_dt = read_clock(ctrl)
+    if ctrl_dt is None:
+        logging.warning("Clock sync skipped — could not read controller RTC.")
+        return
+
+    now = local_now()
+    drift = int((now - ctrl_dt).total_seconds())
+    logging.info("Controller RTC: %s  System: %s  drift: %+d s",
+                 ctrl_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                 now.strftime('%Y-%m-%d %H:%M:%S'), drift)
+
+    if abs(drift) <= 60:
+        logging.info("Clock sync not needed (drift within 60 s).")
+        return
+
+    try:
+        write_clock(ctrl, local_now())
+    except Exception as e:
+        logging.warning("Clock sync write failed: %s", e)
+        return
+
+    time.sleep(0.5)
+    ctrl_dt2 = read_clock(ctrl)
+    if ctrl_dt2:
+        drift2 = int((local_now() - ctrl_dt2).total_seconds())
+        logging.info("Clock synced. New drift: %+d s", drift2)
+    else:
+        logging.warning("Clock sync written but readback failed.")
+
+
+# ===============================
 # Main entry point
 # ===============================
 def main():
@@ -755,6 +796,9 @@ def main():
 
     # Now safe to open a DBus connection for timezone lookup
     _apply_venus_timezone()
+
+    # Sync the controller RTC to system local time if drift exceeds 60 s.
+    _sync_controller_clock(controller)
 
     # Create the EPEVER DBus service instance
     epever = DbusEpever()
