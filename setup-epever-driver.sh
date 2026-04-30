@@ -152,6 +152,39 @@ download_and_extract() {
     rm master.zip
 }
 
+# ─── Custom name ──────────────────────────────────────────────────────────────
+
+save_custom_name() {
+    echo ""
+    read -p "Give this device a custom name? [y/N] " -n 1 -r
+    echo ""
+    local CUSTOM_NAME=""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        read -p "  Enter name (default: PV Charger): " CUSTOM_NAME
+        # trim leading/trailing whitespace
+        CUSTOM_NAME="$(echo "$CUSTOM_NAME" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    fi
+    [ -z "$CUSTOM_NAME" ] && CUSTOM_NAME="PV Charger"
+    CUSTOM_NAME_CHARGER="$CUSTOM_NAME" \
+    CUSTOM_NAME_TEMP="$CUSTOM_NAME Temperature" \
+    CUSTOM_NAME_SWITCH="$CUSTOM_NAME Load Output" \
+    python3 - <<'PYEOF'
+import json, os
+state_file = '/data/dbus-epever-tracer/state.json'
+try:
+    with open(state_file) as f:
+        s = json.load(f)
+except Exception:
+    s = {}
+s['customname_charger'] = os.environ['CUSTOM_NAME_CHARGER']
+s['customname_temp']    = os.environ['CUSTOM_NAME_TEMP']
+s['customname_switch']  = os.environ['CUSTOM_NAME_SWITCH']
+with open(state_file, 'w') as f:
+    json.dump(s, f)
+PYEOF
+    echo "      Name set to: $CUSTOM_NAME"
+}
+
 # ─── Install / Update ─────────────────────────────────────────────────────────
 
 do_install_update() {
@@ -194,6 +227,8 @@ do_install_update() {
         echo "[5/5] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
         bash /data/dbus-epever-tracer/setup.sh
         echo "      Done."
+
+        save_custom_name
 
         echo ""
         echo "[+] Starting driver..."
@@ -257,6 +292,8 @@ do_install_update() {
         echo "[5/5] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
         bash /data/dbus-epever-tracer/setup.sh
         echo "      Done."
+
+        save_custom_name
 
         echo ""
         echo "[+] Starting driver..."
