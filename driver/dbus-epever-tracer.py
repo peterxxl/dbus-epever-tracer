@@ -87,7 +87,7 @@ def _apply_venus_timezone():
 # These variables define the driver version, device identity, and service settings.
 serialnumber = 'WO20160415-008-0056'
 productname = 'PV Charger'
-firmwareversion = 'v2026.04.29-2251'
+firmwareversion = 'v2026.04.30-1331'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -205,6 +205,7 @@ REGISTER_HISTORY_DAILY = 0x330C  # Daily historical generated energy data
 REGISTER_PARAMETERS = 0x9000  # Charging and load parameters
 REGISTER_CHARGE_VOLTAGES = 0x9007  # Boost (absorption) voltage setpoint; 0x9008 = float; 0x9009 = boost reconnect
 REGISTER_BOOST_DURATION  = 0x906C  # Boost duration in minutes (holding register)
+REGISTER_OVER_TEMP       = 0x2000  # Discrete input: controller over-temperature (FC02, 1=above protection threshold)
 
 # controller and servicename are initialised in main() once the serial port
 # is known and validated; declared here so the module-level scope is explicit.
@@ -398,6 +399,8 @@ class DbusEpever(object):
             charge_voltages = controller.read_registers(REGISTER_CHARGE_VOLTAGES, 3, 3)
             # 0x906C: Boost duration in minutes
             boost_duration_reg = controller.read_registers(REGISTER_BOOST_DURATION, 1, 3)
+            # 0x2000: Discrete input — controller over-temperature flag (FC02)
+            over_temp_bit = controller.read_bit(REGISTER_OVER_TEMP, 2)
 
             # Check lengths to avoid IndexError
             if not (len(c3100) >= 17 and len(c3200) >= 3 and len(c3300) >= 19 and len(c330C) >= 2 and len(charge_voltages) >= 3 and len(boost_duration_reg) >= 1):
@@ -433,6 +436,7 @@ class DbusEpever(object):
             # c3200[1] = Register 0x3201: Charging status (flags for charging state, PV status, etc.)
             self._dbusservice['/ErrorCode'] = map_epever_error(c3200[0], c3200[1])
             self._dbusservice['/WarningCode'] = map_epever_warning(c3200[0])
+            self._dbusservice['/Alarms/HighTemperature'] = 2 if over_temp_bit else 0  # 0x2000: 0=Normal, 2=Alarm
 
             # Map EPEVER charger state to Victron state for VRM compatibility.
             # Victron: 0=Off, 3=Bulk, 4=Absorption, 5=Float, 6=Equalise

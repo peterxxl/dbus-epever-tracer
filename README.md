@@ -37,9 +37,17 @@ VRM portal (remote monitoring, via internet)
 The driver is a Python 3 process that:
 
 1. Opens the RS-485 serial port at startup (port passed as a CLI argument by `serial-starter`).
-2. Reads four blocks of Modbus holding registers once per second.
+2. Reads six blocks of Modbus registers once per second (holding registers + one FC02 discrete input).
 3. Converts raw register values to SI units and maps EPEVER states/errors to Victron equivalents.
-4. Publishes everything on a `com.victronenergy.solarcharger` DBus service, which the Venus OS device picks up automatically.
+4. Publishes everything across three DBus services, which the Venus OS device picks up automatically.
+
+The three DBus services registered:
+
+| Service | Type | Purpose |
+|---|---|---|
+| `com.victronenergy.solarcharger.ttyUSBx` | Solar charger | Main charger data, history, alarms |
+| `com.victronenergy.temperature.ttyUSBx` | Temperature | Controller internal temperature sensor |
+| `com.victronenergy.switch.ttyUSBx` | DC switch | Controllable load output |
 
 ---
 
@@ -47,23 +55,31 @@ The driver is a Python 3 process that:
 
 - Real-time PV voltage, current, and power
 - Battery voltage, current, and temperature
-- Load current and on/off state
+- Controller internal temperature on a dedicated `com.victronenergy.temperature` DBus service
+- Load current, on/off state, and fault detection
+- **Controllable load output** — exposed as a `com.victronenergy.switch` service; toggle from the GX display or VRM
 - Victron charging state (Bulk / Absorption / Float / Equalise)
+- **Absorption detection** — EPEVER combines Bulk and Absorption into one phase; the driver splits them using the absorption voltage setpoint (0x9007) and boost duration (0x906C)
 - Daily and historical yield (kWh)
 - Daily max/min voltages, max power, max battery current
 - Time spent in each charging phase per day
+- Up to 30 days of rolling history
 - EPEVER fault bits translated to Victron MPPT error codes
+- EPEVER status bits translated to Victron warning codes
+- **High-temperature alarm** (`/Alarms/HighTemperature`) from controller discrete input 0x2000
+- **State persistence** — daily accumulators and 30-day history saved to `/data/dbus-epever-tracer/state.json` every tick; restored on restart so a driver restart within the same day loses no data
 - Automatic reconnection: exits after 3 consecutive Modbus failures so the supervisor restarts it
 
 ---
 
 ## DBus paths published
 
+### Solar charger service (`com.victronenergy.solarcharger.ttyUSBx`)
+
 | Path | Unit | Description |
 |---|---|---|
 | `/Dc/0/Voltage` | V | Battery voltage |
 | `/Dc/0/Current` | A | Battery charging current |
-| `/Dc/0/Temperature` | °C | Controller (internal) temperature |
 | `/Pv/V` | V | PV array voltage |
 | `/Yield/Power` | W | Instantaneous PV power |
 | `/Yield/User` | kWh | Total generated energy (lifetime) |
@@ -72,11 +88,29 @@ The driver is a Python 3 process that:
 | `/Load/State` | — | Load output on/off |
 | `/State` | — | Victron charging state (0/3/4/5/6) |
 | `/ErrorCode` | — | Victron MPPT error code |
-| `/History/Daily/0/*` | — | Today's statistics |
-| `/History/Daily/1/*` | — | Yesterday's statistics |
+| `/WarningCode` | — | Victron warning code |
+| `/Alarms/HighTemperature` | — | `0` = Normal, `2` = Alarm (from register 0x2000) |
+| `/History/Daily/0/*` | — | Today's statistics (live) |
+| `/History/Daily/1/*` … `/History/Daily/30/*` | — | Previous 30 days |
 | `/History/Overall/*` | — | Lifetime max/min |
 
 Victron charging state values: `0` = Off, `3` = Bulk, `4` = Absorption, `5` = Float, `6` = Storage/Equalise.
+
+### Temperature service (`com.victronenergy.temperature.ttyUSBx`)
+
+| Path | Unit | Description |
+|---|---|---|
+| `/Temperature` | °C | Controller internal temperature (register 0x3111) |
+| `/TemperatureType` | — | `0` = Battery sensor type |
+
+### Switch service (`com.victronenergy.switch.ttyUSBx`)
+
+| Path | Description |
+|---|---|
+| `/SwitchableOutput/output_1/State` | Current load output state (writable) |
+| `/SwitchableOutput/output_1/Status` | `9` = Normal, `13` = Fault |
+| `/SwitchableOutput/output_1/Current` | Load output current |
+| `/ModuleVoltage` | Battery voltage (mirror) |
 
 ---
 
