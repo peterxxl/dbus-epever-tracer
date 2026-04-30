@@ -6,15 +6,26 @@ GITHUB_VELIB=https://github.com/victronenergy/velib_python/archive/master.zip
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 SCRIPT_NAME=$(basename "$0")
 
+# ─── Colours ──────────────────────────────────────────────────────────────────
+
+BD=$'\033[1m'
+DM=$'\033[2m'
+RS=$'\033[0m'
+CY=$'\033[96m'   # bright cyan  — headers, step labels
+GR=$'\033[92m'   # bright green — success, done
+YL=$'\033[93m'   # bright yellow — warnings, prompts, info
+RD=$'\033[91m'   # bright red   — errors
+WH=$'\033[97m'   # bright white — banner text, values
+
 is_installed() {
     [ -f "$DRIVER_DIR/driver/dbus-epever-tracer.py" ]
 }
 
 echo ""
-echo "================================================="
-echo "  Epever Tracer — Venus OS Driver Setup"
-echo "  Tested with Victron Energy USB RS485 cable"
-echo "================================================="
+echo "${BD}${CY}=================================================${RS}"
+echo "${BD}${WH}  Epever Tracer — Venus OS Driver Setup${RS}"
+echo "${DM}${WH}  Tested with Victron Energy USB RS485 cable${RS}"
+echo "${BD}${CY}=================================================${RS}"
 echo ""
 
 # ─── Menu ─────────────────────────────────────────────────────────────────────
@@ -22,26 +33,26 @@ echo ""
 if is_installed; then
     CURRENT_VERSION=$(grep -m1 "^firmwareversion" "$DRIVER_DIR/driver/dbus-epever-tracer.py" \
         | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
-    echo "Status: installed (${CURRENT_VERSION:-unknown})"
+    echo "  Status: ${GR}${BD}installed${RS} ${DM}(${CURRENT_VERSION:-unknown})${RS}"
     echo ""
-    echo "  1) Update to latest version"
-    echo "  2) Remove from system"
-    echo "  3) Cancel"
+    echo "  ${WH}1)${RS} Update to latest version"
+    echo "  ${WH}2)${RS} Remove from system"
+    echo "  ${WH}3)${RS} Cancel"
     echo ""
-    read -p "Choose [1/2/3]: " -n 1 -r CHOICE
+    read -p "${YL}  Choose [1/2/3]: ${RS}" -n 1 -r CHOICE
     echo ""
     case "$CHOICE" in
         1) ACTION=update ;;
         2) ACTION=remove ;;
-        *) echo "Cancelled."; exit 0 ;;
+        *) echo "${YL}  Cancelled.${RS}"; exit 0 ;;
     esac
 else
-    echo "Status: not installed"
+    echo "  Status: ${YL}not installed${RS}"
     echo ""
-    read -p "Install at your own risk. Proceed? [y/N] " -n 1 -r
+    read -p "${YL}  Install at your own risk. Proceed? [y/N] ${RS}" -n 1 -r
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Cancelled. No changes were made."
+        echo "${YL}  Cancelled. No changes were made.${RS}"
         exit 0
     fi
     ACTION=install
@@ -50,55 +61,50 @@ fi
 # ─── Remove ───────────────────────────────────────────────────────────────────
 
 do_remove() {
-    echo "The following changes will be made:"
-    echo "  - Driver service(s) stopped and removed from supervision"
-    echo "  - Symlinks removed from /opt/victronenergy/"
-    echo "  - epever entry removed from /etc/venus/serial-starter.conf"
-    echo "  - Udev rule removed from /etc/udev/rules.d/serial-starter.rules"
-    echo "  - Boot hook entries removed from /data/rcS.local and /data/rc.local"
-    echo "  - serial-starter restarted to reassign the serial port"
+    echo "${YL}  The following changes will be made:${RS}"
+    echo "${DM}    - Driver service(s) stopped and removed from supervision"
+    echo "    - Symlinks removed from /opt/victronenergy/"
+    echo "    - epever entry removed from /etc/venus/serial-starter.conf"
+    echo "    - Udev rule removed from /etc/udev/rules.d/serial-starter.rules"
+    echo "    - Boot hook entries removed from /data/rcS.local and /data/rc.local"
+    echo "    - serial-starter restarted to reassign the serial port${RS}"
     echo ""
-    read -p "Continue? [y/N] " -r REPLY
+    read -p "${YL}  Continue? [y/N] ${RS}" -r REPLY
     echo ""
     if [[ ! $REPLY =~ ^[Yy] ]]; then
-        echo "Cancelled. Nothing was changed."
+        echo "${YL}  Cancelled. Nothing was changed.${RS}"
         exit 0
     fi
 
     echo ""
-    echo "[1/5] Stopping driver service(s)..."
+    echo "  ${BD}${CY}[1/5]${RS} Stopping driver service(s)..."
     for SVC in $(ls /service/ 2>/dev/null | grep dbus-epever-tracer); do
         svc -d "/service/$SVC" 2>/dev/null || true
         sleep 1
-        # Release the serial-starter lock for this TTY so it can be reassigned
         TTY="${SVC#dbus-epever-tracer.}"
         rm -f "/var/lock/serial-starter/$TTY"
-        # Remove the service symlink and the volatile copy
         rm -f "/service/$SVC"
         rm -rf "/var/volatile/services/$SVC"
     done
-    echo "      Done."
+    echo "        ${GR}Done.${RS}"
 
     echo ""
-    echo "[2/5] Removing symlinks from /opt/victronenergy/..."
+    echo "  ${BD}${CY}[2/5]${RS} Removing symlinks from /opt/victronenergy/..."
     rm -f /opt/victronenergy/dbus-epever-tracer
     rm -f /opt/victronenergy/service-templates/dbus-epever-tracer
-    echo "      Done."
+    echo "        ${GR}Done.${RS}"
 
     echo ""
-    echo "[3/5] Removing serial-starter entry..."
-    # Only removes the exact line we added; leaves the rest of the file intact.
+    echo "  ${BD}${CY}[3/5]${RS} Removing serial-starter entry..."
     sed -i '/service[[:space:]]*epever[[:space:]]*dbus-epever-tracer/d' \
         /etc/venus/serial-starter.conf
-    echo "      Done."
+    echo "        ${GR}Done.${RS}"
 
     echo ""
-    echo "[4/5] Removing udev rule and boot hooks..."
-    # Udev rule — remove the comment and the rule line we appended.
+    echo "  ${BD}${CY}[4/5]${RS} Removing udev rule and boot hooks..."
     sed -i '/# Epever Tracer/d' /etc/udev/rules.d/serial-starter.rules
     sed -i '/VE_SERVICE.*="epever"/d' /etc/udev/rules.d/serial-starter.rules
     udevadm control --reload-rules 2>/dev/null || true
-    # Boot hooks — remove only the lines this script added.
     if [ -f /data/rcS.local ]; then
         sed -i '/dbus-epever-tracer\/setup.sh/d' /data/rcS.local
     fi
@@ -106,46 +112,44 @@ do_remove() {
         sed -i '/dbus-epever-tracer\/setup.sh/d' /data/rc.local
         sed -i '/udevadm trigger --action=add --subsystem-match=tty/d' /data/rc.local
     fi
-    echo "      Done."
+    echo "        ${GR}Done.${RS}"
 
     echo ""
-    echo "[5/5] Restarting serial-starter..."
-    # serial-starter will re-evaluate the serial port using the updated rules.
+    echo "  ${BD}${CY}[5/5]${RS} Restarting serial-starter..."
     svc -t /service/serial-starter 2>/dev/null || true
-    echo "      Done."
+    echo "        ${GR}Done.${RS}"
 
     echo ""
-    read -p "Also delete driver files in $DRIVER_DIR? [y/N] " -r REPLY
+    read -p "${YL}  Also delete driver files in $DRIVER_DIR? [y/N] ${RS}" -r REPLY
     echo ""
     if [[ $REPLY =~ ^[Yy] ]]; then
         rm -rf "$DRIVER_DIR"
-        echo "      Files deleted."
+        echo "        ${GR}Files deleted.${RS}"
     else
-        echo "      Files kept at $DRIVER_DIR"
-        echo "      (run this script again to reinstall)"
+        echo "        ${DM}Files kept at $DRIVER_DIR${RS}"
+        echo "        ${DM}(run this script again to reinstall)${RS}"
     fi
 
     echo ""
-    echo "================================================="
-    echo "  Driver removed successfully."
-    echo "================================================="
+    echo "${BD}${GR}=================================================${RS}"
+    echo "${BD}${GR}  Driver removed successfully.${RS}"
+    echo "${BD}${GR}=================================================${RS}"
     echo ""
 }
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-# Download a zip from $1 and extract it; exits the script on failure.
 download_and_extract() {
     local url=$1
     local label=$2
     rm -f master.zip
     if ! wget -q --show-progress "$url" -O master.zip; then
-        echo "      ERROR: download failed ($label)."
+        echo "        ${RD}${BD}ERROR:${RS}${RD} download failed ($label).${RS}"
         rm -f master.zip
         exit 1
     fi
     if ! unzip -q master.zip; then
-        echo "      ERROR: failed to extract archive ($label)."
+        echo "        ${RD}${BD}ERROR:${RS}${RD} failed to extract archive ($label).${RS}"
         rm -f master.zip
         exit 1
     fi
@@ -156,11 +160,11 @@ download_and_extract() {
 
 save_custom_name() {
     echo ""
-    read -p "Give this device a custom name? [y/N] " -r REPLY
+    read -p "${YL}  Give this device a custom name? [y/N] ${RS}" -r REPLY
     echo ""
     local CUSTOM_NAME=""
     if [[ $REPLY =~ ^[Yy] ]]; then
-        read -p "  Enter name (default: PV Charger): " -r CUSTOM_NAME
+        read -p "${WH}    Enter name (default: PV Charger): ${RS}" -r CUSTOM_NAME
         CUSTOM_NAME="$(echo "$CUSTOM_NAME" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     fi
     [ -z "$CUSTOM_NAME" ] && CUSTOM_NAME="PV Charger"
@@ -182,16 +186,16 @@ s['customname_output']  = ''
 with open(state_file, 'w') as f:
     json.dump(s, f)
 PYEOF
-    echo "      Name set to: $CUSTOM_NAME"
+    echo "        ${GR}Name set to: ${BD}$CUSTOM_NAME${RS}"
 }
 
 save_serial_number() {
     echo ""
-    read -p "Set a serial number for this device? [y/N] " -r REPLY
+    read -p "${YL}  Set a serial number for this device? [y/N] ${RS}" -r REPLY
     echo ""
     local SERIAL=""
     if [[ $REPLY =~ ^[Yy] ]]; then
-        read -p "  Enter serial number: " -r SERIAL
+        read -p "${WH}    Enter serial number: ${RS}" -r SERIAL
         SERIAL="$(echo "$SERIAL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     fi
     SERIAL_NUMBER="$SERIAL" \
@@ -208,9 +212,9 @@ with open(state_file, 'w') as f:
     json.dump(s, f)
 PYEOF
     if [ -n "$SERIAL" ]; then
-        echo "      Serial number set to: $SERIAL"
+        echo "        ${GR}Serial number set to: ${BD}$SERIAL${RS}"
     else
-        echo "      Serial number left empty."
+        echo "        ${DM}Serial number left empty.${RS}"
     fi
 }
 
@@ -221,17 +225,17 @@ do_install_update() {
 
     if [ "$ACTION" = install ]; then
         echo ""
-        echo "[1/5] Downloading driver..."
+        echo "  ${BD}${CY}[1/5]${RS} Downloading driver..."
         download_and_extract "$GITHUB_DRIVER" "driver"
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         echo ""
-        echo "[2/5] Downloading Victron velib_python library..."
+        echo "  ${BD}${CY}[2/5]${RS} Downloading Victron velib_python library..."
         download_and_extract "$GITHUB_VELIB" "velib_python"
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         echo ""
-        echo "[3/5] Installing files..."
+        echo "  ${BD}${CY}[3/5]${RS} Installing files..."
         mkdir -p dbus-epever-tracer/ext/velib_python
         cp -R dbus-epever-tracer-master/* dbus-epever-tracer
         cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
@@ -240,35 +244,35 @@ do_install_update() {
                 && chmod +x "$SCRIPT_DIR/$SCRIPT_NAME"
         fi
         rm -r velib_python-master dbus-epever-tracer-master
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         echo ""
-        echo "[4/5] Setting permissions..."
+        echo "  ${BD}${CY}[4/5]${RS} Setting permissions..."
         chmod +x /data/dbus-epever-tracer/setup-epever-driver.sh
         chmod +x /data/dbus-epever-tracer/setup.sh
         chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
         chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
         chmod +x /data/dbus-epever-tracer/service/run
         chmod +x /data/dbus-epever-tracer/service/log/run
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         echo ""
-        echo "[5/5] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
+        echo "  ${BD}${CY}[5/5]${RS} Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
         bash /data/dbus-epever-tracer/setup.sh
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         save_custom_name
         save_serial_number
 
         echo ""
-        echo "[+] Starting driver..."
+        echo "  ${BD}${CY}[+]${RS} Starting driver..."
         svc -t /service/serial-starter
         sleep 3
         SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
         if [ -n "$SVC" ]; then
-            echo "      Driver started: $SVC"
+            echo "        ${GR}Driver started: ${BD}$SVC${RS}"
         else
-            echo "      RS485 adapter not detected yet — plug it in and the driver will start automatically."
+            echo "        ${YL}RS485 adapter not detected yet — plug it in and the driver will start automatically.${RS}"
         fi
 
     else  # update
@@ -279,20 +283,20 @@ do_install_update() {
         SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
 
         echo ""
-        echo "[1/5] Downloading driver..."
+        echo "  ${BD}${CY}[1/5]${RS} Downloading driver..."
         download_and_extract "$GITHUB_DRIVER" "driver"
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         echo ""
-        echo "[2/5] Downloading Victron velib_python library..."
+        echo "  ${BD}${CY}[2/5]${RS} Downloading Victron velib_python library..."
         download_and_extract "$GITHUB_VELIB" "velib_python"
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         NEW_VERSION=$(grep -m1 "^firmwareversion" "dbus-epever-tracer-master/driver/dbus-epever-tracer.py" \
             | sed "s/.*=[ ]*['\"]//;s/['\"].*//")
 
         echo ""
-        echo "[3/5] Installing files..."
+        echo "  ${BD}${CY}[3/5]${RS} Installing files..."
         mkdir -p dbus-epever-tracer/ext/velib_python
         cp -R dbus-epever-tracer-master/* dbus-epever-tracer
         cp -R velib_python-master/* dbus-epever-tracer/ext/velib_python
@@ -307,12 +311,12 @@ do_install_update() {
         chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
         chmod +x /data/dbus-epever-tracer/service/run
         chmod +x /data/dbus-epever-tracer/service/log/run
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         echo ""
-        echo "[4/5] Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
+        echo "  ${BD}${CY}[4/5]${RS} Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
         bash /data/dbus-epever-tracer/setup.sh
-        echo "      Done."
+        echo "        ${GR}Done.${RS}"
 
         echo ""
         python3 - <<'PYEOF'
@@ -323,58 +327,55 @@ try:
         s = json.load(f)
 except Exception:
     s = {}
-print("  Current device name  : " + (s.get('customname_charger') or '(not set)'))
-print("  Current serial number: " + (s.get('serialnumber') or '(not set)'))
+print("  \033[2mCurrent device name  :\033[0m \033[97m" + (s.get('customname_charger') or '(not set)') + "\033[0m")
+print("  \033[2mCurrent serial number:\033[0m \033[97m" + (s.get('serialnumber') or '(not set)') + "\033[0m")
 PYEOF
         echo ""
-        read -p "Update device name / serial number? [y/N] " -r REPLY
+        read -p "${YL}  Update device name / serial number? [y/N] ${RS}" -r REPLY
         echo ""
         if [[ $REPLY =~ ^[Yy] ]]; then
             save_custom_name
             save_serial_number
         else
-            echo "      Device name and serial number unchanged."
+            echo "        ${DM}Device name and serial number unchanged.${RS}"
         fi
 
         echo ""
-        echo "[5/5] Restarting driver..."
-        # Stop the running service first so serial-starter can cleanly recreate it.
+        echo "  ${BD}${CY}[5/5]${RS} Restarting driver..."
         if [ -n "$SVC" ]; then
             svc -d "/service/$SVC" 2>/dev/null || true
             sleep 1
         fi
-        # serial-starter rebuilds the volatile service copy from the updated template
-        # and restarts the driver — same mechanism the install flow uses.
         svc -t /service/serial-starter
         sleep 4
         SVC=$(ls /service/ 2>/dev/null | grep dbus-epever-tracer | head -n 1)
         if [ -n "$SVC" ]; then
-            echo "      Driver restarted: $SVC"
+            echo "        ${GR}Driver restarted: ${BD}$SVC${RS}"
         else
-            echo "      RS485 adapter not detected — plug it in and the driver will start automatically."
+            echo "        ${YL}RS485 adapter not detected — plug it in and the driver will start automatically.${RS}"
         fi
 
     fi
 
     echo ""
-    echo "================================================="
+    echo "${BD}${GR}=================================================${RS}"
     if [ "$ACTION" = update ]; then
-        echo "  Update complete."
+        echo "${BD}${GR}  Update complete.${RS}"
         echo ""
-        echo "  Previous version : ${OLD_VERSION:-unknown}"
-        echo "  Installed version: ${NEW_VERSION:-unknown}"
+        echo "  ${DM}Previous version :${RS} ${WH}${OLD_VERSION:-unknown}${RS}"
+        echo "  ${DM}Installed version:${RS} ${WH}${BD}${NEW_VERSION:-unknown}${RS}"
     else
-        echo "  Installation complete."
+        echo "${BD}${GR}  Installation complete.${RS}"
     fi
-    echo "================================================="
+    echo "${BD}${GR}=================================================${RS}"
     echo ""
-    read -p "Reboot the system now? [y/N] " -n 1 -r
+    read -p "${YL}  Reboot the system now? [y/N] ${RS}" -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Rebooting..."
+        echo "${YL}  Rebooting...${RS}"
         reboot
     else
-        echo "Reboot skipped."
+        echo "${DM}  Reboot skipped.${RS}"
     fi
     echo ""
 }
