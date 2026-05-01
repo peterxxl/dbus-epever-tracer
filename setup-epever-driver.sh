@@ -168,9 +168,21 @@ save_custom_name() {
         CUSTOM_NAME="$(echo "$CUSTOM_NAME" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
     fi
     [ -z "$CUSTOM_NAME" ] && CUSTOM_NAME="PV Charger"
+
+    echo ""
+    read -p "${YL}  Give the battery temperature sensor a custom name? [y/N] ${RS}" -r REPLY
+    echo ""
+    local BATT_TEMP_NAME=""
+    if [[ $REPLY =~ ^[Yy] ]]; then
+        read -p "${WH}    Enter name (default: Battery Temperature): ${RS}" -r BATT_TEMP_NAME
+        BATT_TEMP_NAME="$(echo "$BATT_TEMP_NAME" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    fi
+    [ -z "$BATT_TEMP_NAME" ] && BATT_TEMP_NAME="Battery Temperature"
+
     CUSTOM_NAME_CHARGER="$CUSTOM_NAME" \
     CUSTOM_NAME_TEMP="$CUSTOM_NAME Temperature" \
     CUSTOM_NAME_SWITCH="$CUSTOM_NAME Load Output" \
+    CUSTOM_NAME_BATT_TEMP="$BATT_TEMP_NAME" \
     python3 - <<'PYEOF'
 import json, os
 state_file = '/data/dbus-epever-tracer/state.json'
@@ -179,14 +191,16 @@ try:
         s = json.load(f)
 except Exception:
     s = {}
-s['customname_charger'] = os.environ['CUSTOM_NAME_CHARGER']
-s['customname_temp']    = os.environ['CUSTOM_NAME_TEMP']
-s['customname_switch']  = os.environ['CUSTOM_NAME_SWITCH']
-s['customname_output']  = ''
+s['customname_charger']      = os.environ['CUSTOM_NAME_CHARGER']
+s['customname_temp']         = os.environ['CUSTOM_NAME_TEMP']
+s['customname_switch']       = os.environ['CUSTOM_NAME_SWITCH']
+s['customname_output']       = ''
+s['customname_battery_temp'] = os.environ['CUSTOM_NAME_BATT_TEMP']
 with open(state_file, 'w') as f:
     json.dump(s, f)
 PYEOF
-    echo "        ${GR}Name set to: ${BD}$CUSTOM_NAME${RS}"
+    echo "        ${GR}Device name set to: ${BD}$CUSTOM_NAME${RS}"
+    echo "        ${GR}Battery temp name set to: ${BD}$BATT_TEMP_NAME${RS}"
 }
 
 save_serial_number() {

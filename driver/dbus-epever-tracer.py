@@ -88,10 +88,11 @@ def _apply_venus_timezone():
 # ===============================
 # These variables define the driver version, device identity, and service settings.
 productname = 'PV Charger'
-firmwareversion = 'v2026.05.01-1140'
+firmwareversion = 'v2026.05.01-2230'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
+batttempservicename = 'com.victronenergy.temperature.tty_batt'
 switchservicename = 'com.victronenergy.switch.tty'
 # State mapping for EPEVER to Victron charger states:
 # Indexes: [00 01 10 11] where bits are [discharge, charge]
@@ -343,7 +344,20 @@ class DbusEpever(object):
         self._tempservice.add_path('/Serial', self._serialnumber)
         self._tempservice.add_path('/Connected', 1)
         self._tempservice.add_path('/Temperature', None, gettextcallback=_c)
-        self._tempservice.add_path('/TemperatureType', 0)  # 0 = battery
+        self._tempservice.add_path('/TemperatureType', 2)  # 2 = generic (controller/case temperature)
+
+        # Battery temperature service — reports the external battery temperature sensor (register 0x3110)
+        self._batttempservice = VeDbusService(batttempservicename, bus=dbus.SystemBus(private=True))
+        self._batttempservice.add_path('/Mgmt/ProcessName', __file__)
+        self._batttempservice.add_path('/Mgmt/Connection', connection)
+        self._batttempservice.add_path('/DeviceInstance', self._deviceinstance + 1)
+        self._batttempservice.add_path('/ProductName', productname + ' Battery Temperature')
+        self._batttempservice.add_path('/CustomName', self._customname_battery_temp, writeable=True,
+                                       onchangecallback=self._on_customname_battery_temp)
+        self._batttempservice.add_path('/Serial', self._serialnumber)
+        self._batttempservice.add_path('/Connected', 1)
+        self._batttempservice.add_path('/Temperature', None, gettextcallback=_c)
+        self._batttempservice.add_path('/TemperatureType', 0)  # 0 = battery
 
         # Switch service — exposes the load output as a controllable DC switch
         self._switchservice = VeDbusService(switchservicename, bus=dbus.SystemBus(private=True))
@@ -397,6 +411,11 @@ class DbusEpever(object):
 
     def _on_customname_output(self, path, value):
         self._customname_output = value
+        self._save_state()
+        return True
+
+    def _on_customname_battery_temp(self, path, value):
+        self._customname_battery_temp = value
         self._save_state()
         return True
 
@@ -458,7 +477,8 @@ class DbusEpever(object):
             # c3100 registers from 0x3100 - PV array and battery data
             self._dbusservice['/Dc/0/Voltage'] = c3100[4]/100      # Register 0x3104: Battery voltage (V), divide by 100
             self._dbusservice['/Dc/0/Current'] = c3100[5]/100      # Register 0x3105: Battery charging current (A), divide by 100
-            self._tempservice['/Temperature'] = c3100[17]/100  # Register 0x3111: Controller temperature (°C), divide by 100
+            self._tempservice['/Temperature']    = c3100[17]/100  # Register 0x3111: Controller temperature (°C), divide by 100
+            self._batttempservice['/Temperature'] = c3100[16]/100  # Register 0x3110: Battery temperature (°C), divide by 100
             self._dbusservice['/Pv/V'] = c3100[0]/100              # Register 0x3100: PV array voltage (V), divide by 100
             self._dbusservice['/Yield/Power'] = round((c3100[2] | c3100[3] << 16)/100) # Registers 0x3102-0x3103: PV array charging power (W), divide by 100
             self._dbusservice['/Load/I'] = c3100[13]/100           # Register 0x310D: Load current (A), divide by 100
@@ -676,7 +696,8 @@ class DbusEpever(object):
         self._customname_charger = ''
         self._customname_temp    = ''
         self._customname_switch  = ''
-        self._customname_output  = ''
+        self._customname_output      = ''
+        self._customname_battery_temp = 'Battery Temperature'
         self._serialnumber       = ''
         self._deviceinstance     = 278
         try:
@@ -687,7 +708,8 @@ class DbusEpever(object):
             self._customname_charger = s.get('customname_charger', '')
             self._customname_temp    = s.get('customname_temp', '')
             self._customname_switch  = s.get('customname_switch', '')
-            self._customname_output  = s.get('customname_output', '')
+            self._customname_output       = s.get('customname_output', '')
+            self._customname_battery_temp = s.get('customname_battery_temp', 'Battery Temperature')
             self._serialnumber       = s.get('serialnumber', '')
             self._deviceinstance     = int(s.get('deviceinstance', 278))
             if s.get('date') == datetime.now().strftime('%Y-%m-%d'):
@@ -726,7 +748,8 @@ class DbusEpever(object):
             'customname_charger':       self._customname_charger,
             'customname_temp':          self._customname_temp,
             'customname_switch':        self._customname_switch,
-            'customname_output':        self._customname_output,
+            'customname_output':         self._customname_output,
+            'customname_battery_temp':   self._customname_battery_temp,
             'serialnumber':             self._serialnumber,
             'deviceinstance':           self._deviceinstance,
             'history':                  self._history,
@@ -801,7 +824,7 @@ def main():
         sys.exit(1)
 
     port = sys.argv[1]
-    global controller, servicename, tempservicename, switchservicename
+    global controller, servicename, tempservicename, batttempservicename, switchservicename
     try:
         controller = minimalmodbus.Instrument(port, 1)  # Modbus slave address 1
     except Exception as e:
@@ -827,8 +850,9 @@ def main():
     controller.serial.reset_input_buffer()
 
     # Build the DBus service names from the port's basename (e.g. ttyUSB0)
-    servicename     = 'com.victronenergy.solarcharger.' + port.split('/')[-1]
-    tempservicename = 'com.victronenergy.temperature.'  + port.split('/')[-1]
+    servicename       = 'com.victronenergy.solarcharger.' + port.split('/')[-1]
+    tempservicename   = 'com.victronenergy.temperature.'  + port.split('/')[-1]
+    batttempservicename = 'com.victronenergy.temperature.' + port.split('/')[-1] + '_batt'
     switchservicename = 'com.victronenergy.switch.'     + port.split('/')[-1]
 
     from dbus.mainloop.glib import DBusGMainLoop
