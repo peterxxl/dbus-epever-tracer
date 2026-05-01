@@ -46,8 +46,8 @@ udevadm control --reload-rules 2>/dev/null || true
 # Registers this script in /data/rcS.local so it runs before services start.
 # Venus OS runs rcS.local via /etc/rcS.d/S99custom-rc-early.sh (requires -x).
 RCS_LOCAL=/data/rcS.local
-if ! grep -q "dbus-epever-tracer/setup.sh" "$RCS_LOCAL" 2>/dev/null; then
-    echo "bash $DRIVER_DIR/setup.sh" >> "$RCS_LOCAL"
+if ! grep -q "dbus-epever-tracer/setup-post-os-update.sh" "$RCS_LOCAL" 2>/dev/null; then
+    echo "bash $DRIVER_DIR/setup-post-os-update.sh" >> "$RCS_LOCAL"
 fi
 chmod +x "$RCS_LOCAL"
 

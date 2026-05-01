@@ -51,7 +51,7 @@ The process is supervised by daemontools/runit (Venus OS standard). If it exits,
 | `service/run` | Daemontools run script; redirects stderr and launches the shell wrapper |
 | `service/log/run` | Daemontools log script; runs `multilog` to rotate logs |
 | `setup-epever-driver.sh` | Combined installer / updater / remover for Venus OS |
-| `setup.sh` | Idempotent post-update OS config (symlinks, serial-starter, udev, boot hooks) |
+| `setup-post-os-update.sh` | Idempotent post-update OS config (symlinks, serial-starter, udev, boot hooks) |
 | `epsolar_modbus_protocol_map.md` | Full EPEVER register map with ranges, observed 24 V defaults, source annotations, and Tracer 3210A compatibility notes |
 | `serial-starter.rules.default` | Example udev rules; the installer appends a rule to the live file |
 | `tools/epever-monitor.py` | Standalone live terminal monitor — reads all register blocks, colour-coded display, `--dump` mode for raw frame capture |

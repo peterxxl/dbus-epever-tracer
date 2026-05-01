@@ -334,7 +334,7 @@ dbus-epever-tracer/
 │   └── epever_rtc.py                Shared RTC register helpers (used by driver and tools)
 ├── epsolar_modbus_protocol_map.md   EPEVER register reference
 ├── setup-epever-driver.sh           Install / update / remove
-├── setup.sh                         Post-update OS config (boot hooks, symlinks, udev)
+├── setup-post-os-update.sh                         Post-update OS config (boot hooks, symlinks, udev)
 └── serial-starter.rules.default     Example udev rules
 ```
 

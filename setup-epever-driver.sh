@@ -106,10 +106,10 @@ do_remove() {
     sed -i '/VE_SERVICE.*="epever"/d' /etc/udev/rules.d/serial-starter.rules
     udevadm control --reload-rules 2>/dev/null || true
     if [ -f /data/rcS.local ]; then
-        sed -i '/dbus-epever-tracer\/setup.sh/d' /data/rcS.local
+        sed -i '/dbus-epever-tracer\/setup-post-os-update.sh/d' /data/rcS.local
     fi
     if [ -f /data/rc.local ]; then
-        sed -i '/dbus-epever-tracer\/setup.sh/d' /data/rc.local
+        sed -i '/dbus-epever-tracer\/setup-post-os-update.sh/d' /data/rc.local
         sed -i '/udevadm trigger --action=add --subsystem-match=tty/d' /data/rc.local
     fi
     echo "        ${GR}Done.${RS}"
@@ -283,7 +283,7 @@ do_install_update() {
         echo ""
         echo "  ${BD}${CY}[4/5]${RS} Setting permissions..."
         chmod +x /data/dbus-epever-tracer/setup-epever-driver.sh
-        chmod +x /data/dbus-epever-tracer/setup.sh
+        chmod +x /data/dbus-epever-tracer/setup-post-os-update.sh
         chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
         chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
         chmod +x /data/dbus-epever-tracer/service/run
@@ -292,7 +292,7 @@ do_install_update() {
 
         echo ""
         echo "  ${BD}${CY}[5/5]${RS} Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
-        bash /data/dbus-epever-tracer/setup.sh
+        bash /data/dbus-epever-tracer/setup-post-os-update.sh
         echo "        ${GR}Done.${RS}"
 
         save_custom_name
@@ -341,7 +341,7 @@ do_install_update() {
         fi
         rm -r velib_python-master dbus-epever-tracer-master
         chmod +x /data/dbus-epever-tracer/setup-epever-driver.sh
-        chmod +x /data/dbus-epever-tracer/setup.sh
+        chmod +x /data/dbus-epever-tracer/setup-post-os-update.sh
         chmod +x /data/dbus-epever-tracer/driver/start-dbus-epever-tracer.sh
         chmod +x /data/dbus-epever-tracer/driver/dbus-epever-tracer.py
         chmod +x /data/dbus-epever-tracer/service/run
@@ -350,7 +350,7 @@ do_install_update() {
 
         echo ""
         echo "  ${BD}${CY}[4/5]${RS} Applying OS configuration (symlinks, serial-starter, udev, boot hooks)..."
-        bash /data/dbus-epever-tracer/setup.sh
+        bash /data/dbus-epever-tracer/setup-post-os-update.sh
         echo "        ${GR}Done.${RS}"
 
         echo ""
