@@ -88,7 +88,7 @@ def _apply_venus_timezone():
 # ===============================
 # These variables define the driver version, device identity, and service settings.
 productname = 'PV Charger'
-firmwareversion = 'v2026.05.01-2230'
+firmwareversion = 'v2026.05.13-0004'
 connection = 'USB'
 servicename = 'com.victronenergy.solarcharger.tty'
 tempservicename = 'com.victronenergy.temperature.tty'
@@ -220,6 +220,8 @@ class DbusEpever(object):
         """Create and register the DBus service."""
         self._dbusservice = VeDbusService(servicename)
         self._exception_counter = 0
+        self._comms_ok = True       # False while Modbus is unreachable
+        self._backoff_until = 0     # epoch seconds; retry not attempted before this time
         self._load_command = None   # pending load on/off command from switch service
 
         # Variables for tracking charge state times
@@ -339,6 +341,7 @@ class DbusEpever(object):
         self._tempservice.add_path('/Mgmt/Connection', connection)
         self._tempservice.add_path('/DeviceInstance', self._deviceinstance)
         self._tempservice.add_path('/ProductName', productname + ' Temperature')
+        self._tempservice.add_path('/ProductId', 0xA162)
         self._tempservice.add_path('/CustomName', self._customname_temp, writeable=True,
                                    onchangecallback=self._on_customname_temp)
         self._tempservice.add_path('/Serial', self._serialnumber)
@@ -352,6 +355,7 @@ class DbusEpever(object):
         self._batttempservice.add_path('/Mgmt/Connection', connection)
         self._batttempservice.add_path('/DeviceInstance', self._deviceinstance + 1)
         self._batttempservice.add_path('/ProductName', productname + ' Battery Temperature')
+        self._batttempservice.add_path('/ProductId', 0xA162)
         self._batttempservice.add_path('/CustomName', self._customname_battery_temp, writeable=True,
                                        onchangecallback=self._on_customname_battery_temp)
         self._batttempservice.add_path('/Serial', self._serialnumber)
@@ -419,6 +423,171 @@ class DbusEpever(object):
         self._save_state()
         return True
 
+    def _try_key_registers(self):
+        """Read every used register one at a time when block reads are failing.
+
+        Single-register requests produce 7-byte responses that are far more
+        likely to complete on a degraded RS-485 link than 41- or 45-byte block
+        reads. The serial timeout is reduced to 0.5 s for the duration so that
+        a complete failure does not block the GLib loop for too long. Publishes
+        whatever succeeds and logs a single line listing unreadable addresses.
+        """
+        failed = []
+
+        old_timeout = controller.serial.timeout
+        controller.serial.timeout = 0.5
+        try:
+            def r(addr):
+                try:
+                    return controller.read_registers(addr, 1, 4)[0]
+                except Exception:
+                    failed.append(f'0x{addr:04X}')
+                    return None
+
+            def h(addr):
+                try:
+                    return controller.read_registers(addr, 1, 3)[0]
+                except Exception:
+                    failed.append(f'0x{addr:04X}')
+                    return None
+
+            # --- c3100: PV array and battery live values ---
+            pv_v      = r(0x3100)
+            pv_pw_lo  = r(0x3102)
+            pv_pw_hi  = r(0x3103)
+            batt_v    = r(0x3104)
+            batt_i    = r(0x3105)
+            load_i    = r(0x310D)
+            batt_temp = r(0x3110)
+            ctrl_temp = r(0x3111)
+
+            if pv_v is not None:
+                self._dbusservice['/Pv/V'] = pv_v / 100
+            if pv_pw_lo is not None:
+                hi = pv_pw_hi if pv_pw_hi is not None else 0
+                self._dbusservice['/Yield/Power'] = round((pv_pw_lo | hi << 16) / 100)
+            if batt_v is not None:
+                self._dbusservice['/Dc/0/Voltage'] = batt_v / 100
+                self._switchservice['/ModuleVoltage'] = batt_v / 100
+            if batt_i is not None:
+                self._dbusservice['/Dc/0/Current'] = batt_i / 100
+            if load_i is not None:
+                self._dbusservice['/Load/I'] = load_i / 100
+                self._switchservice['/SwitchableOutput/output_1/Current'] = load_i / 100
+            if batt_temp is not None:
+                self._batttempservice['/Temperature'] = batt_temp / 100
+            if ctrl_temp is not None:
+                self._tempservice['/Temperature'] = ctrl_temp / 100
+
+            # --- c3200: charge state, error codes, load status ---
+            batt_status = r(0x3200)
+            chg_status  = r(0x3201)
+            load_status = r(0x3202)
+
+            if batt_status is not None and chg_status is not None:
+                self._dbusservice['/ErrorCode']   = map_epever_error(batt_status, chg_status)
+                self._dbusservice['/WarningCode'] = map_epever_warning(batt_status)
+            if load_status is not None:
+                load_on = load_status & 1
+                self._dbusservice['/Load/State'] = load_on
+                self._switchservice['/SwitchableOutput/output_1/State']  = load_on
+                self._switchservice['/SwitchableOutput/output_1/Status'] = 13 if (load_status & 0x0F02) else 9
+
+            # Charge state with absorption split when setpoints are readable
+            if chg_status is not None:
+                epever_phase  = _get_bit(chg_status, 3) * 2 + _get_bit(chg_status, 2)
+                victron_state = state[epever_phase]
+                abs_v_r       = h(0x9007)
+                reconnect_v_r = h(0x9009)
+                boost_dur_r   = h(0x906C)
+                if victron_state == 3 and None not in (abs_v_r, reconnect_v_r, boost_dur_r):
+                    batt_v_f      = self._dbusservice['/Dc/0/Voltage']
+                    abs_v_f       = abs_v_r / 100
+                    reconnect_v_f = reconnect_v_r / 100
+                    if self._absorption_start_time is None:
+                        if batt_v_f is not None and batt_v_f >= abs_v_f:
+                            self._absorption_start_time = time.time()
+                            victron_state = 4
+                    else:
+                        elapsed = (time.time() - self._absorption_start_time) / 60
+                        if batt_v_f is not None and batt_v_f < reconnect_v_f:
+                            self._absorption_start_time = None
+                        elif elapsed >= boost_dur_r:
+                            self._absorption_start_time = None
+                        else:
+                            victron_state = 4
+                elif victron_state != 3:
+                    self._absorption_start_time = None
+                self._dbusservice['/State'] = victron_state
+
+            # --- c3300: daily and lifetime statistics ---
+            daily_max_pv_v   = r(0x3300)
+            daily_max_batt_v = r(0x3302)
+            daily_min_batt_v = r(0x3303)
+            total_yield_lo   = r(0x3312)
+            total_yield_hi   = r(0x3313)
+
+            if daily_max_pv_v is not None:
+                v = daily_max_pv_v / 100
+                if v > self._daily_max_pv_v:
+                    self._daily_max_pv_v = v
+                self._dbusservice['/History/Daily/0/MaxPvVoltage'] = self._daily_max_pv_v
+                if self._daily_max_pv_v > self._dbusservice['/History/Overall/MaxPvVoltage']:
+                    self._dbusservice['/History/Overall/MaxPvVoltage'] = self._daily_max_pv_v
+            if daily_max_batt_v is not None:
+                v = daily_max_batt_v / 100
+                if v > self._daily_max_batt_v:
+                    self._daily_max_batt_v = v
+                self._dbusservice['/History/Daily/0/MaxBatteryVoltage'] = self._daily_max_batt_v
+                if self._daily_max_batt_v > self._dbusservice['/History/Overall/MaxBatteryVoltage']:
+                    self._dbusservice['/History/Overall/MaxBatteryVoltage'] = self._daily_max_batt_v
+            if daily_min_batt_v is not None:
+                v = daily_min_batt_v / 100
+                if v < self._daily_min_batt_v:
+                    self._daily_min_batt_v = v
+                self._dbusservice['/History/Daily/0/MinBatteryVoltage'] = self._daily_min_batt_v
+                if self._daily_min_batt_v < self._dbusservice['/History/Overall/MinBatteryVoltage']:
+                    self._dbusservice['/History/Overall/MinBatteryVoltage'] = self._daily_min_batt_v
+            if total_yield_lo is not None:
+                hi = total_yield_hi if total_yield_hi is not None else 0
+                total = (total_yield_lo | hi << 16) / 100
+                self._dbusservice['/Yield/User']   = total
+                self._dbusservice['/Yield/System'] = total
+
+            # --- c330C: today's generated energy ---
+            daily_yield_lo = r(0x330C)
+            daily_yield_hi = r(0x330D)
+
+            if daily_yield_lo is not None:
+                hi = daily_yield_hi if daily_yield_hi is not None else 0
+                reg_yield = (daily_yield_lo | hi << 16) / 100
+                if reg_yield > self._daily_yield:
+                    self._daily_yield = reg_yield
+                self._dbusservice['/History/Daily/0/Yield'] = self._daily_yield
+
+            # --- over-temperature discrete input (FC2) ---
+            try:
+                over_temp = controller.read_bit(REGISTER_OVER_TEMP, 2)
+                self._dbusservice['/Alarms/HighTemperature'] = 2 if over_temp else 0
+            except Exception:
+                failed.append('0x2000')
+
+        finally:
+            controller.serial.timeout = old_timeout
+
+        # Daily max power and current are derived from live values, not registers
+        if self._dbusservice['/Yield/Power'] is not None:
+            if self._dbusservice['/Yield/Power'] > self._dbusservice['/History/Daily/0/MaxPower']:
+                self._dbusservice['/History/Daily/0/MaxPower'] = self._dbusservice['/Yield/Power']
+        if self._dbusservice['/Dc/0/Current'] is not None:
+            if self._dbusservice['/Dc/0/Current'] > self._dbusservice['/History/Daily/0/MaxBatteryCurrent']:
+                self._dbusservice['/History/Daily/0/MaxBatteryCurrent'] = self._dbusservice['/Dc/0/Current']
+
+        if failed:
+            logging.info("Degraded read — could not read: %s", ', '.join(failed))
+
+        self._save_state()
+
     def _update(self):
         """Read registers and publish the latest values on DBus.
 
@@ -429,6 +598,10 @@ class DbusEpever(object):
         errors the driver exits so that the supervisor can restart it.
         """
 
+
+        # Skip this tick if we're in retry backoff after repeated failures
+        if not self._comms_ok and time.time() < self._backoff_until:
+            return True
 
         try:
             # Read main data registers from EPEVER (see protocol docs for meaning)
@@ -460,14 +633,29 @@ class DbusEpever(object):
                 logging.warning("Modbus read returned unexpected data lengths.")
                 return True
         except Exception as e:
-            # On communication error, increment error counter and exit after 3 failures
-            logging.exception("Exception occurred during Modbus read: %s", e)
             self._exception_counter += 1
-            if self._exception_counter >= 3:
-                logging.critical("Too many Modbus failures, exiting.")
-                sys.exit(1)
+            if self._comms_ok:
+                # First run of failures — log verbosely
+                logging.exception("Modbus read failed: %s", e)
+                if self._exception_counter >= 3:
+                    self._comms_ok = False
+                    self._backoff_until = time.time() + 30
+                    self._dbusservice['/Connected'] = 0
+                    self._dbusservice['/State'] = 0
+                    logging.warning("Modbus unresponsive after %d failures — retrying every 30 s.", self._exception_counter)
+            else:
+                # Already in degraded mode — schedule next retry, log every 10 attempts (~5 min)
+                self._backoff_until = time.time() + 30
+                if self._exception_counter % 10 == 0:
+                    logging.warning("Modbus still unreachable (%d attempts since last success).", self._exception_counter)
+            # Block reads failed — try individual registers for key live values
+            self._try_key_registers()
             return True
         else:
+            if not self._comms_ok:
+                logging.info("Modbus comms restored after %d failed attempts.", self._exception_counter)
+                self._comms_ok = True
+                self._dbusservice['/Connected'] = 1
             self._exception_counter = 0  # Reset on success
             # Prevent divide by zero for PV voltage (min 0.01 so PV current can be calculated)
             if c3100[0] < 1:
@@ -836,7 +1024,7 @@ def main():
     controller.serial.bytesize = 8         # 8 data bits
     controller.serial.parity = serial.PARITY_NONE  # No parity
     controller.serial.stopbits = 1         # 1 stop bit
-    controller.serial.timeout = 0.2        # 200 ms timeout
+    controller.serial.timeout = 1.0        # 1 s — 0x3300 block has mid-frame pause; 200 ms causes truncation
     controller.mode = minimalmodbus.MODE_RTU  # Use RTU (binary) mode
     controller.clear_buffers_before_each_transaction = True  # Prevents stale data
 
